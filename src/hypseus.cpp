@@ -184,106 +184,109 @@ int main(int argc, char **argv)
     // errors this is important!  if game_type or ldp_type fails to allocate
     // g_game and g_ldp, then the program will segfault and hypseus must NEVER
     // segfault!  hehe
-    if (parse_cmd_line(argc, argv)) {
-        // MATT : we have to wait until after the command line is parsed before
-        // we do anything with the LEDs in case the
-        // user does not enable them
-        remember_leds(); // memorizes the status of keyboard leds
-        change_led(false, false, false); // turns all keyboard leds off
-
-        // MAC : we also have to wait after the command line is parsed before
-        // knowing if we want loging or not.
-        if (!log_was_disabled)
-            reset_logfile(argc, argv);
-
-        // if the display initialized properly
-        // MAC: init_display() call moved to the sdl_video_run thread: it's now
-        // called at the begining of the sdl_video_run thread main function.
-	//if (video::load_bmps() && video::init_display()) {
-	if (video::load_bmps()) {
-            if (sound::init()) {
-                if (SDL_input_init()) {
-                    // if the roms were loaded successfully
-                    if (g_game->load_roms()) {
-                        // if the video was initialized successfully
-                        if (g_game->init_video()) {
-                            // if the game has some problems, notify the user
-                            // before the user plays the game
-                            if (g_game->get_issues()) {
-                                printnowookin(g_game->get_issues());
-                            }
-
-                            // delay for a bit before the LDP is intialized to
-                            // make sure all video is done getting drawn before
-                            // VLDP is initialized
-                            SDL_Delay(1000);
-
-                            // if the laserdisc player was initialized properly
-                            if (g_ldp->pre_init()) {
-                                if (g_game->pre_init()) // initialize all cpu's
-                                {
-                                    LOGD << "Booting ROM ...";
-                                    g_game->start(); // HERE IS THE MAIN LOOP
-                                                     // RIGHT HERE
-                                    g_game->pre_shutdown();
-
-                                    // Send our game/ldp type to server to
-                                    // create stats.
-                                    // This was moved to after the game has
-                                    // finished running because it creates a
-                                    // slight delay (like 1 second), which
-                                    // throws off the think_delay function in
-                                    // the LDP class.
-                                    
-                                    // MAC: Commented to speed up testing 
-                                    // without internet connection.
-                                    // net_send_data_to_server();
-
-                                    result_code = g_game->get_game_errors();
-                                                          // hypseus will exit with
-                                                          // error codes
-                                } else {
-                                    // exit if returns an error but don't print
-                                    // error message to avoid repetition
-                                }
-                                g_ldp->pre_shutdown();
-                            } else {
-                                printerror(
-                                    "Could not initialize laserdisc player!");
-                            }
-                            g_game->shutdown_video();
-                        } // end if game video was initted properly
-                        else {
-                            printerror(
-                                "Game-specific video initialization failed!");
-                        }
-                    } // end if roms were loaded properly
-                    else {
-                        printerror("Could not load ROM images! You must supply "
-                                   "these.");
-                    }
-                    SDL_input_shutdown();
-                } else {
-                    printerror("Could not initialize input!");
-                }
-                sound::shutdown();
-            } else {
-                printerror("Sound initialization failed!");
-            }
-            // MAC : DON'T do this here, it's too soon
-            // to call SDL_Quit(VIDEO), we don't want segfaults on exit.
-            // video::shutdown_display();
-        }                       // end init display
-        else {
-            printerror("Video initialization failed!");
-        }
-    } // end game class allocated properly
-
-    // if command line was bogus, quit
-    else {
+    if (!parse_cmd_line(argc, argv)) {
         printerror("Bad command line or initialization problem.");
+        goto cleanup;
     }
 
+    // MATT : we have to wait until after the command line is parsed before
+    // we do anything with the LEDs in case the
+    // user does not enable them
+    remember_leds();                 // memorizes the status of keyboard leds
+    change_led(false, false, false); // turns all keyboard leds off
+
+    // MAC : we also have to wait after the command line is parsed before
+    // knowing if we want loging or not.
+    if (!log_was_disabled) reset_logfile(argc, argv);
+
+    // check if the display initialized properly
+    if (!video::load_bmps()) {
+        printerror("Video initialization failed!");
+        goto cleanup;
+    }
+
+    if (!sound::init()) {
+        printerror("Sound initialization failed!");
+        goto cleanup;
+    }
+
+    if (!SDL_input_init()) {
+        printerror("Could not initialize input!");
+        sound::shutdown();
+        goto cleanup;
+    }
+
+    // check if the roms were loaded successfully
+    if (!g_game->load_roms()) {
+        printerror("Could not load ROM images! You must supply these.");
+        SDL_input_shutdown();
+        sound::shutdown();
+        goto cleanup;
+    }
+
+    // check if the video was initialized successfully
+    if (!g_game->init_video()) {
+        printerror("Game-specific video initialization failed!");
+        SDL_input_shutdown();
+        sound::shutdown();
+        goto cleanup;
+    }
+
+    // if the game has some problems, notify the user
+    // before the user plays the game
+    if (g_game->get_issues()) { printnowookin(g_game->get_issues()); }
+
+    // delay for a bit before the LDP is intialized to
+    // make sure all video is done getting drawn before
+    // VLDP is initialized
+    SDL_Delay(1000);
+
+    // check if the laserdisc player was initialized properly
+    if (!g_ldp->pre_init()) {
+        printerror("Could not initialize laserdisc player!");
+        g_game->shutdown_video();
+        SDL_input_shutdown();
+        sound::shutdown();
+        goto cleanup;
+    }
+
+    if (g_game->pre_init()) // initialize all cpu's
+    {
+        LOGD << "Booting ROM ...";
+        g_game->start(); // HERE IS THE MAIN LOOP
+                         // RIGHT HERE
+        g_game->pre_shutdown();
+
+        // Send our game/ldp type to server to
+        // create stats.
+        // This was moved to after the game has
+        // finished running because it creates a
+        // slight delay (like 1 second), which
+        // throws off the think_delay function in
+        // the LDP class.
+
+        // MAC: Commented to speed up testing
+        // without internet connection.
+        // net_send_data_to_server();
+
+        result_code = g_game->get_game_errors();
+        // hypseus will exit with
+        // error codes
+    }
+
+    // exit if returns an error but don't print
+    // error message to avoid repetition
+
+    g_ldp->pre_shutdown();
+    g_game->shutdown_video();
+    SDL_input_shutdown();
+    sound::shutdown();
+
+    // MAC : DON'T do this here, it's too soon
+    // to call SDL_Quit(VIDEO), we don't want segfaults on exit.
+    // video::shutdown_display();
+
+cleanup:
     // if our g_game class was allocated
     if (g_game) {
         if (g_game->get_manymouse()) ManyMouse_Quit();
