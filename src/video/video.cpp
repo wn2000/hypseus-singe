@@ -178,377 +178,351 @@ bool g_aux_needs_update        = false;
 // returns true if successful, false if failure
 bool init_display()
 {
-    bool result = false; // whether video initialization is successful or not
-    Uint32 sdl_flags = 0;
-    Uint32 sdl_sb_flags = 0;
-    Uint8  sdl_render_flags = 0;
-    Uint8  sdl_sb_render_flags = 0;
     static bool notify = false;
-    char bezelpath[96] = {};
-    char title[50] = "HYPSEUS Singe: Multiple Arcade Laserdisc Emulator";
+    constexpr char title[] = "HYPSEUS Singe: Multiple Arcade Laserdisc Emulator";
 
     SDL_SysWMinfo info;
-    sdl_flags = SDL_WINDOW_SHOWN;
-    sdl_sb_flags = SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_BORDERLESS;
-    sdl_render_flags = SDL_RENDERER_TARGETTEXTURE;
+    Uint32 sdl_flags = SDL_WINDOW_SHOWN;
+    Uint32 sdl_sb_flags = SDL_WINDOW_ALWAYS_ON_TOP | SDL_WINDOW_BORDERLESS;
+    Uint8 sdl_render_flags = SDL_RENDERER_TARGETTEXTURE;
 
     // if we were able to initialize the video properly
-    if (SDL_InitSubSystem(SDL_INIT_VIDEO) >= 0) {
-
-        if (g_fullscreen) sdl_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
-        else if (g_fakefullscreen) sdl_flags |= SDL_WINDOW_MAXIMIZED | SDL_WINDOW_BORDERLESS;
-
-        if (g_opengl) {
-            sdl_flags |= SDL_WINDOW_OPENGL;
-            sdl_sb_flags |= SDL_WINDOW_OPENGL;
-        } else if (g_vulkan) {
-            sdl_flags |= SDL_WINDOW_VULKAN;
-            sdl_sb_flags |= SDL_WINDOW_VULKAN;
-        }
-
-        g_overlay_width = g_game->get_video_overlay_width();
-        g_overlay_height = g_game->get_video_overlay_height();
-
-        // Enforce a minimum window size
-        if ((int)g_probe_width < g_vid_width) g_probe_width = g_vid_width;
-        if ((int)g_probe_height < g_vid_height) g_probe_height = g_vid_height;
-
-        if (g_vid_resized) {
-            g_draw_width  = g_viewport_width  = g_vid_width;
-            g_draw_height = g_viewport_height = g_vid_height;
-
-        } else {
-
-            g_draw_width  = g_probe_width;
-            g_draw_height = g_probe_height;
-
-            if (!g_bIgnoreAspectRatio && g_aspect_width > 0) {
-                g_viewport_width  = g_aspect_width;
-                g_viewport_height = g_aspect_height;
-            } else {
-                g_viewport_width  = g_draw_width;
-                g_viewport_height = g_draw_height;
-            }
-        }
-
-        // Enforce 4:3 aspect ratio
-        if (g_bForceAspectRatio) {
-            double dCurAspectRatio = (double)g_draw_width / g_draw_height;
-            const double dTARGET_ASPECT_RATIO = 4.0 / 3.0;
-
-            if (dCurAspectRatio < dTARGET_ASPECT_RATIO) {
-                g_draw_height = (g_draw_width * 3) / 4;
-                g_viewport_height = (g_viewport_width * 3) / 4;
-            }
-            else if (dCurAspectRatio > dTARGET_ASPECT_RATIO) {
-                g_draw_width = (g_draw_height * 4) / 3;
-                g_viewport_width = (g_viewport_height * 4) / 3;
-            }
-        }
-
-        // if we're supposed to scale the image...
-        if (g_scalefactor < 100) {
-            g_scaling_rect.w = (g_viewport_width * g_scalefactor) / 100;
-            g_scaling_rect.h = (g_viewport_height * g_scalefactor) / 100;
-            g_scaling_rect.x = ((g_viewport_width - g_scaling_rect.w) >> 1);
-            g_scaling_rect.y = ((g_viewport_height - g_scaling_rect.h) >> 1);
-
-            if (g_keyboard_bezel)
-                g_scaling_rect.y = g_scaling_rect.y >> 2;
-        }
-
-        if (!SDL_RectEmpty(&g_scaling_rect)) g_scale_view = true;
-
-        if (notify) {
-            LOGI << fmt("Viewport resolution: %dx%d", g_viewport_width, g_viewport_height);
-        }
-
-        if (g_window) resize_cleanup();
-
-        if (g_fRotateDegrees != 0) {
-            if (g_fRotateDegrees != 180.0) {
-                LOGW << "Screen rotation enabled, aspect ratios will be ignored";
-                g_viewport_height = g_viewport_width;
-            }
-	}
-
-	g_window =
-            SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-                         g_viewport_width, g_viewport_height, sdl_flags);
-
-        if (!g_window) {
-            LOGE << fmt("Could not initialize window: %s", SDL_GetError());
-            exit(SDL_ERROR_INIT);
-        } else {
-            if (g_game->m_sdl_software_rendering) {
-                sdl_render_flags |= SDL_RENDERER_SOFTWARE;
-            } else {
-                sdl_render_flags |= SDL_RENDERER_ACCELERATED;
-            }
-
-            sdl_sb_render_flags = sdl_render_flags;
-
-            if (g_vsync && (sdl_render_flags & SDL_RENDERER_ACCELERATED))
-                sdl_render_flags |= SDL_RENDERER_PRESENTVSYNC;
-
-            g_renderer = SDL_CreateRenderer(g_window, -1, sdl_render_flags);
-
-            if (!g_renderer) {
-                LOGE << fmt("Could not initialize renderer: %s", SDL_GetError());
-                exit(SDL_ERROR_MAINRENDERER);
-            } else {
-
-                if (g_keyboard_bezel) {
-
-                    char tqkeys[18] = {};
-                    char png[11] = "tqkeys.png";
-
-                    snprintf(tqkeys, sizeof(tqkeys), "bezels/%s", png);
-
-                    if (!mpo_file_exists(tqkeys))
-                        snprintf(tqkeys, sizeof(tqkeys), "pics/%s", png);
-
-                    g_aux_texture = IMG_LoadTexture(g_renderer, tqkeys);
-
-                    if (!g_aux_texture) {
-                        LOGE << fmt("Failed to load keyboard graphic: %s - %s",
-                                          tqkeys, SDL_GetError());
-                        set_quitflag();
-                    }
-                }
-                else if (g_annun_bezel)
-                    g_aux_texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_RGBA8888,
-                                       g_texture_access, g_an_w, g_an_h);
-
-                if (g_bezel_file.length() > 0) {
-                    snprintf(bezelpath, sizeof(bezelpath), "bezels/%s", g_bezel_file.c_str());
-
-                    g_bezel_texture = IMG_LoadTexture(g_renderer, bezelpath);
-
-                    if (!notify) {
-                        if (g_bezel_texture) {
-                            LOGI << fmt("Loaded bezel file: %s", bezelpath);
-                        } else {
-                            LOGW << fmt("Failed to load bezel: %s", bezelpath);
-                        }
-                    }
-                }
-
-                SDL_VERSION(&info.version);
-
-                // Set bilinear filtering by default
-                if (!g_fs_scale_nearest)
-                    SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
-
-                // Create a 32-bit surface with alpha component.
-                int surfacebpp;
-                Uint32 Rmask, Gmask, Bmask, Amask;
-                SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888, &surfacebpp,
-                                &Rmask, &Gmask, &Bmask, &Amask);
-
-                if (g_game->m_sdl_software_scoreboard) {
-
-                    if (!g_sb_blit_surface)
-                        g_sb_blit_surface = SDL_CreateRGBSurface(SDL_SWSURFACE, g_sb_w, g_sb_h,
-                                               surfacebpp, Rmask, Gmask, Bmask, Amask);
-
-                    int displays = SDL_GetNumVideoDisplays();
-                    SDL_Rect displayDimensions[displays];
-
-                    for (int i = 0; i < displays; i++)
-                        SDL_GetDisplayBounds(i, &displayDimensions[i]);
-
-                    if (g_sb_bezel) {
-
-                        double scale = 9.0f - double((g_sb_bezel_scale << 1) / 10.0f);
-                        double ratio = (float)g_sb_h / (float)g_sb_w;
-
-                        g_sb_bezel_rect.x = sb_window_pos_x;
-                        g_sb_bezel_rect.y = sb_window_pos_y;
-                        g_sb_bezel_rect.w = (g_viewport_width / scale);
-                        g_sb_bezel_rect.h = (g_sb_bezel_rect.w * ratio);
-
-                        if (!g_sb_bezel_alpha)
-                            SDL_FillRect(g_sb_blit_surface, NULL, 0x000000ff);
-
-                    } else if (SDL_GetWindowWMInfo(g_window, &info) && !g_sb_window) {
-
-                        g_sb_window = SDL_CreateWindow(NULL, sb_window_pos_x,
-                                          sb_window_pos_y, g_sb_w, g_sb_h, sdl_sb_flags);
-
-                        if (!g_sb_window) {
-                            LOGE << fmt("Could not initialize scoreboard window: %s", SDL_GetError());
-                            g_game->set_game_errors(SDL_ERROR_SCOREWINDOW);
-                            set_quitflag();
-                        }
-
-			if (displays > 1)
-                            SDL_SetWindowPosition(g_sb_window,
-                               displayDimensions[1].x + sb_window_pos_x,
-                                  displayDimensions[1].y + sb_window_pos_y);
-
-                        g_sb_renderer = SDL_CreateRenderer(g_sb_window, -1, sdl_sb_render_flags);
-
-                        if (!g_sb_renderer) {
-                            LOGE << fmt("Could not initialize scoreboard renderer: %s", SDL_GetError());
-                            g_game->set_game_errors(SDL_ERROR_SCORERENDERER);
-                            set_quitflag();
-                        }
-                        SDL_SetRenderDrawColor(g_sb_renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-                        SDL_RenderClear(g_sb_renderer);
-                        SDL_RenderPresent(g_sb_renderer);
-                    } else if (!notify) { LOGE << "Cannot create a Scoreboard entity..."; }
-                }
-
-                // MAC: If we start in fullscreen mode, we have to set the logical
-                // render size to get the desired aspect ratio.
-                if ((sdl_flags & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0 ||
-                               (sdl_flags & SDL_WINDOW_MAXIMIZED) != 0) {
-
-                    SDL_RenderSetLogicalSize(g_renderer, g_viewport_width, g_viewport_height);
-
-                    if (g_bezel_texture || !SDL_RectEmpty(&g_sb_bezel_rect))
-                        g_bezel_toggle = true;
-                }
-
-                if (g_aux_texture) {
-
-                    if (g_keyboard_bezel) {
-
-                        SDL_Point size;
-                        SDL_QueryTexture(g_aux_texture, NULL, NULL, &size.x, &size.y);
-
-                        double ratio = (float)size.y / (float)size.x;
-                        const int hpos = 77;
-
-                        g_aux_rect.w = (g_viewport_width / 2.25f);
-                        g_aux_rect.h = (g_aux_rect.w * ratio);
-                        g_aux_rect.x = (g_viewport_width >> 1) - (g_aux_rect.w >> 3);
-                        g_aux_rect.y = (g_viewport_height * hpos) / 100;
-
-                    }
-
-                    if (g_annun_bezel) {
-
-                        double scale = 9.0f - double((g_an_bezel_scale << 1) / 10.0f);
-                        double ratio = (float)g_an_h / (float)g_an_w;
-
-                        g_aux_blit_surface = SDL_CreateRGBSurface(SDL_SWSURFACE, g_an_w, g_an_h,
-                                            surfacebpp, Rmask, Gmask, Bmask, Amask);
-
-                        if (!g_aux_blit_surface) {
-                            LOGE << "Failed to load annunicator surface";
-                            set_quitflag();
-                        }
-
-                        g_aux_rect.x = 0;
-                        g_aux_rect.y = (g_viewport_height * 80) / 100;
-                        g_aux_rect.w = (g_viewport_width / scale);
-                        g_aux_rect.h = (g_aux_rect.w * ratio);
-
-                        // argument override
-                        if (ann_bezel_pos_x || ann_bezel_pos_y) {
-                            g_aux_rect.x = ann_bezel_pos_x;
-                            g_aux_rect.y = ann_bezel_pos_y;
-                        }
-                        draw_annunciator(0);
-                        draw_ranks();
-                    }
-                }
-
-		// Always hide the mouse cursor
-                SDL_ShowCursor(SDL_DISABLE);
-
-                if (g_grabmouse)
-                    SDL_SetWindowGrab(g_window, SDL_TRUE);
-
-                if (g_scanlines)
-                    SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
-
-                // Calculate font sizes
-                int ffs;
-                int fs = get_draw_width() / 36;
-                if (g_aspect_ratio == ASPECTWS) ffs = get_draw_width() / 24;
-                else ffs = get_draw_width() / 18;
-
-                char font[32]="fonts/default.ttf";
-                char fixfont[32] = "fonts/timewarp.ttf";
-                char ttfont[32];
-
-                if (g_game->get_use_old_overlay()) strncpy(ttfont, "fonts/daphne.ttf", sizeof(ttfont));
-                else strncpy(ttfont, "fonts/digital.ttf", sizeof(ttfont));
-
-                g_font = FC_CreateFont();
-                FC_LoadFont(g_font, g_renderer, font, fs,
-                            FC_MakeColor(0xff, 0xff, 0xff, 0xff), TTF_STYLE_NORMAL);
-
-                g_fixfont = FC_CreateFont();
-                FC_LoadFont(g_fixfont, g_renderer, fixfont, ffs,
-                            FC_MakeColor(0xff, 0xff, 0xff, 0xff), TTF_STYLE_NORMAL);
-
-                if (g_game->get_use_old_overlay())
-                    g_ttfont = TTF_OpenFont(ttfont, 12);
-                else
-                    g_ttfont = TTF_OpenFont(ttfont, 14);
-
-                if (g_ttfont == NULL) {
-                    LOG_ERROR << fmt("Cannot load TTF font: '%s'", (char*)ttfont);
-                    deinit_display();
-                    shutdown_display();
-                    exit(SDL_ERROR_FONT);
-                }
-
-		g_screen_blitter =
-		    SDL_CreateRGBSurface(SDL_SWSURFACE, g_overlay_width, g_overlay_height,
-					surfacebpp, Rmask, Gmask, Bmask, Amask);
-
-		// Check for game overlay enhancements (depth and size)
-		g_enhance_overlay = g_game->get_overlay_upgrade();
-		g_overlay_resize = g_game->get_fullsize_overlay();
-
-		g_leds_surface =
-		    SDL_CreateRGBSurface(SDL_SWSURFACE, 320, 240,
-					surfacebpp, Rmask, Gmask, Bmask, Amask);
-
-                // Convert the LEDs surface to the destination surface format for faster
-                // blitting, and set it's color key to NOT copy 0x000000ff pixels. We
-                // couldn't do it earlier in load_bmps() because we need the
-                // g_screen_blitter format.
-                ConvertSurface(&g_other_bmps[B_OVERLAY_LEDS], g_screen_blitter->format);
-                SDL_SetColorKey(g_other_bmps[B_OVERLAY_LEDS], SDL_TRUE, 0x000000ff);
-
-                if (g_game->get_use_old_overlay()) {
-                    ConvertSurface(&g_other_bmps[B_OVERLAY_LDP1450],
-                                   g_screen_blitter->format);
-                    SDL_SetColorKey(g_other_bmps[B_OVERLAY_LDP1450], SDL_TRUE, 0x000000ff);
-                }
-
-                // MAC: If the game uses an overlay, create a texture for it.
-                // The g_screen_blitter surface is used from game.cpp anyway, so we always create it, used or not.
-		if (g_overlay_width && g_overlay_height) {
-		    g_overlay_texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_RGBA8888,
-						 g_texture_access,
-						 g_overlay_width, g_overlay_height);
-
-		    SDL_SetTextureBlendMode(g_overlay_texture, SDL_BLENDMODE_BLEND);
-		    SDL_SetTextureAlphaMod(g_overlay_texture, 0xff);
-                }
-
-                SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-
-                SDL_RenderClear(g_renderer);
-                SDL_RenderPresent(g_renderer);
-                // NOTE: SDL Console was initialized here.
-                result = true;
-            }
-        }
-    } else {
+    if (SDL_InitSubSystem(SDL_INIT_VIDEO)) {
         LOGE << fmt("Could not initialize SDL: %s", SDL_GetError());
-        exit(SDL_ERROR_INIT);
+        return false;
     }
 
+    if (g_fullscreen)
+        sdl_flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
+    else if (g_fakefullscreen)
+        sdl_flags |= SDL_WINDOW_MAXIMIZED | SDL_WINDOW_BORDERLESS;
+
+    if (g_opengl) {
+        sdl_flags |= SDL_WINDOW_OPENGL;
+        sdl_sb_flags |= SDL_WINDOW_OPENGL;
+    } else if (g_vulkan) {
+        sdl_flags |= SDL_WINDOW_VULKAN;
+        sdl_sb_flags |= SDL_WINDOW_VULKAN;
+    }
+
+    g_overlay_width  = g_game->get_video_overlay_width();
+    g_overlay_height = g_game->get_video_overlay_height();
+
+    // Enforce a minimum window size
+    if ((int)g_probe_width < g_vid_width) g_probe_width = g_vid_width;
+    if ((int)g_probe_height < g_vid_height) g_probe_height = g_vid_height;
+
+    if (g_vid_resized) {
+        g_draw_width = g_viewport_width = g_vid_width;
+        g_draw_height = g_viewport_height = g_vid_height;
+    } else {
+        g_draw_width  = g_probe_width;
+        g_draw_height = g_probe_height;
+
+        if (!g_bIgnoreAspectRatio && g_aspect_width > 0) {
+            g_viewport_width  = g_aspect_width;
+            g_viewport_height = g_aspect_height;
+        } else {
+            g_viewport_width  = g_draw_width;
+            g_viewport_height = g_draw_height;
+        }
+    }
+
+    // Enforce 4:3 aspect ratio
+    if (g_bForceAspectRatio) {
+        double dCurAspectRatio = (double)g_draw_width / g_draw_height;
+        const double dTARGET_ASPECT_RATIO = 4.0 / 3.0;
+
+        if (dCurAspectRatio < dTARGET_ASPECT_RATIO) {
+            g_draw_height     = (g_draw_width * 3) / 4;
+            g_viewport_height = (g_viewport_width * 3) / 4;
+        } else if (dCurAspectRatio > dTARGET_ASPECT_RATIO) {
+            g_draw_width     = (g_draw_height * 4) / 3;
+            g_viewport_width = (g_viewport_height * 4) / 3;
+        }
+    }
+
+    // if we're supposed to scale the image...
+    if (g_scalefactor < 100) {
+        g_scaling_rect.w = (g_viewport_width * g_scalefactor) / 100;
+        g_scaling_rect.h = (g_viewport_height * g_scalefactor) / 100;
+        g_scaling_rect.x = ((g_viewport_width - g_scaling_rect.w) >> 1);
+        g_scaling_rect.y = ((g_viewport_height - g_scaling_rect.h) >> 1);
+
+        if (g_keyboard_bezel) g_scaling_rect.y = g_scaling_rect.y >> 2;
+    }
+
+    if (!SDL_RectEmpty(&g_scaling_rect)) g_scale_view = true;
+
+    if (notify) {
+        LOGI << fmt("Viewport resolution: %dx%d", g_viewport_width, g_viewport_height);
+    }
+
+    if (g_window) resize_cleanup();
+
+    if (g_fRotateDegrees != 0 && g_fRotateDegrees != 180.0) {
+        LOGW << "Screen rotation enabled, aspect ratios will be ignored";
+        g_viewport_height = g_viewport_width;
+    }
+
+    g_window = SDL_CreateWindow(title, SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+                                g_viewport_width, g_viewport_height, sdl_flags);
+
+    if (!g_window) {
+        LOGE << fmt("Could not initialize window: %s", SDL_GetError());
+        return false;
+    }
+
+    if (g_game->m_sdl_software_rendering) {
+        sdl_render_flags |= SDL_RENDERER_SOFTWARE;
+    } else {
+        sdl_render_flags |= SDL_RENDERER_ACCELERATED;
+    }
+
+    Uint8 sdl_sb_render_flags = sdl_render_flags;
+
+    if (g_vsync && (sdl_render_flags & SDL_RENDERER_ACCELERATED))
+        sdl_render_flags |= SDL_RENDERER_PRESENTVSYNC;
+
+    g_renderer = SDL_CreateRenderer(g_window, -1, sdl_render_flags);
+
+    if (!g_renderer) {
+        LOGE << fmt("Could not initialize renderer: %s", SDL_GetError());
+        return false;
+    }
+
+    if (g_keyboard_bezel) {
+        std::string tqkeys = "bezels/tqkeys.png";
+        if (!mpo_file_exists(tqkeys.c_str()))
+            tqkeys = "pics/tqkeys.png";
+
+        g_aux_texture = IMG_LoadTexture(g_renderer, tqkeys.c_str());
+
+        if (!g_aux_texture) {
+            LOGE << fmt("Failed to load keyboard graphic: %s - %s", tqkeys.c_str(), SDL_GetError());
+            set_quitflag();
+        }
+    } else if (g_annun_bezel) {
+        g_aux_texture = SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_RGBA8888,
+                                          g_texture_access, g_an_w, g_an_h);
+    }
+
+    if (!g_bezel_file.empty()) {
+        std::string bezelpath = "bezels/" + g_bezel_file;
+        g_bezel_texture = IMG_LoadTexture(g_renderer, bezelpath.c_str());
+
+        if (!notify) {
+            if (g_bezel_texture) {
+                LOGI << fmt("Loaded bezel file: %s", bezelpath.c_str());
+            } else {
+                LOGW << fmt("Failed to load bezel: %s", bezelpath.c_str());
+            }
+        }
+    }
+
+    SDL_VERSION(&info.version);
+
+    // Set bilinear filtering by default
+    if (!g_fs_scale_nearest)
+        SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "linear");
+
+    // Create a 32-bit surface with alpha component.
+    int surfacebpp;
+    Uint32 Rmask, Gmask, Bmask, Amask;
+    SDL_PixelFormatEnumToMasks(SDL_PIXELFORMAT_RGBA8888, &surfacebpp, &Rmask,
+                               &Gmask, &Bmask, &Amask);
+
+    if (g_game->m_sdl_software_scoreboard) {
+
+        if (!g_sb_blit_surface)
+            g_sb_blit_surface = SDL_CreateRGBSurface(SDL_SWSURFACE, g_sb_w, g_sb_h, surfacebpp,
+                                                     Rmask, Gmask, Bmask, Amask);
+
+        int displays = SDL_GetNumVideoDisplays();
+        SDL_Rect displayDimensions[displays];
+
+        for (int i = 0; i < displays; i++)
+            SDL_GetDisplayBounds(i, &displayDimensions[i]);
+
+        if (g_sb_bezel) {
+
+            double scale = 9.0f - double((g_sb_bezel_scale << 1) / 10.0f);
+            double ratio = (float)g_sb_h / (float)g_sb_w;
+
+            g_sb_bezel_rect.x = sb_window_pos_x;
+            g_sb_bezel_rect.y = sb_window_pos_y;
+            g_sb_bezel_rect.w = (g_viewport_width / scale);
+            g_sb_bezel_rect.h = (g_sb_bezel_rect.w * ratio);
+
+            if (!g_sb_bezel_alpha)
+                SDL_FillRect(g_sb_blit_surface, NULL, 0x000000ff);
+
+        } else if (SDL_GetWindowWMInfo(g_window, &info) && !g_sb_window) {
+
+            g_sb_window = SDL_CreateWindow(NULL, sb_window_pos_x, sb_window_pos_y,
+                                           g_sb_w, g_sb_h, sdl_sb_flags);
+
+            if (!g_sb_window) {
+                LOGE << fmt("Could not initialize scoreboard window: %s", SDL_GetError());
+                g_game->set_game_errors(SDL_ERROR_SCOREWINDOW);
+                set_quitflag();
+            }
+
+            if (displays > 1)
+                SDL_SetWindowPosition(g_sb_window, displayDimensions[1].x + sb_window_pos_x,
+                                      displayDimensions[1].y + sb_window_pos_y);
+
+            g_sb_renderer = SDL_CreateRenderer(g_sb_window, -1, sdl_sb_render_flags);
+
+            if (!g_sb_renderer) {
+                LOGE << fmt("Could not initialize scoreboard renderer: "
+                            "%s",
+                            SDL_GetError());
+                g_game->set_game_errors(SDL_ERROR_SCORERENDERER);
+                set_quitflag();
+            }
+            SDL_SetRenderDrawColor(g_sb_renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+            SDL_RenderClear(g_sb_renderer);
+            SDL_RenderPresent(g_sb_renderer);
+        } else if (!notify) {
+            LOGE << "Cannot create a Scoreboard entity...";
+        }
+    }
+
+    // MAC: If we start in fullscreen mode, we have to set the logical
+    // render size to get the desired aspect ratio.
+    if ((sdl_flags & SDL_WINDOW_FULLSCREEN_DESKTOP) != 0 ||
+        (sdl_flags & SDL_WINDOW_MAXIMIZED) != 0) {
+
+        SDL_RenderSetLogicalSize(g_renderer, g_viewport_width, g_viewport_height);
+
+        if (g_bezel_texture || !SDL_RectEmpty(&g_sb_bezel_rect))
+            g_bezel_toggle = true;
+    }
+
+    if (g_aux_texture) {
+
+        if (g_keyboard_bezel) {
+
+            SDL_Point size;
+            SDL_QueryTexture(g_aux_texture, NULL, NULL, &size.x, &size.y);
+
+            double ratio   = (float)size.y / (float)size.x;
+            const int hpos = 77;
+
+            g_aux_rect.w = (g_viewport_width / 2.25f);
+            g_aux_rect.h = (g_aux_rect.w * ratio);
+            g_aux_rect.x = (g_viewport_width >> 1) - (g_aux_rect.w >> 3);
+            g_aux_rect.y = (g_viewport_height * hpos) / 100;
+        }
+
+        if (g_annun_bezel) {
+
+            double scale = 9.0f - double((g_an_bezel_scale << 1) / 10.0f);
+            double ratio = (float)g_an_h / (float)g_an_w;
+
+            g_aux_blit_surface =
+                SDL_CreateRGBSurface(SDL_SWSURFACE, g_an_w, g_an_h, surfacebpp,
+                                     Rmask, Gmask, Bmask, Amask);
+
+            if (!g_aux_blit_surface) {
+                LOGE << "Failed to load annunicator surface";
+                set_quitflag();
+            }
+
+            g_aux_rect.x = 0;
+            g_aux_rect.y = (g_viewport_height * 80) / 100;
+            g_aux_rect.w = (g_viewport_width / scale);
+            g_aux_rect.h = (g_aux_rect.w * ratio);
+
+            // argument override
+            if (ann_bezel_pos_x || ann_bezel_pos_y) {
+                g_aux_rect.x = ann_bezel_pos_x;
+                g_aux_rect.y = ann_bezel_pos_y;
+            }
+            draw_annunciator(0);
+            draw_ranks();
+        }
+    }
+
+    // Always hide the mouse cursor
+    SDL_ShowCursor(SDL_DISABLE);
+
+    if (g_grabmouse) SDL_SetWindowGrab(g_window, SDL_TRUE);
+
+    if (g_scanlines)
+        SDL_SetRenderDrawBlendMode(g_renderer, SDL_BLENDMODE_BLEND);
+
+    // Calculate font sizes
+    int fs = get_draw_width() / 36;
+    int ffs = g_aspect_ratio == ASPECTWS ? get_draw_width() / 24 : get_draw_width() / 18;
+
+    g_font = FC_CreateFont();
+    FC_LoadFont(g_font, g_renderer, "fonts/default.ttf", fs,
+                FC_MakeColor(0xff, 0xff, 0xff, 0xff), TTF_STYLE_NORMAL);
+
+    g_fixfont = FC_CreateFont();
+    FC_LoadFont(g_fixfont, g_renderer, "fonts/timewarp.ttf", ffs,
+                FC_MakeColor(0xff, 0xff, 0xff, 0xff), TTF_STYLE_NORMAL);
+
+    const char *ttfont = nullptr;
+    if (g_game->get_use_old_overlay()) {
+        ttfont = "fonts/daphne.ttf";
+        g_ttfont = TTF_OpenFont(ttfont, 12);
+    } else {
+        ttfont = "fonts/digital.ttf";
+        g_ttfont = TTF_OpenFont(ttfont, 14);
+    }
+
+    if (g_ttfont == NULL) {
+        LOG_ERROR << fmt("Cannot load TTF font: '%s'", ttfont);
+        deinit_display();
+        shutdown_display();
+        return false;
+    }
+
+    g_screen_blitter = SDL_CreateRGBSurface(SDL_SWSURFACE, g_overlay_width, g_overlay_height,
+                                            surfacebpp, Rmask, Gmask, Bmask, Amask);
+
+    // Check for game overlay enhancements (depth and size)
+    g_enhance_overlay = g_game->get_overlay_upgrade();
+    g_overlay_resize  = g_game->get_fullsize_overlay();
+
+    g_leds_surface = SDL_CreateRGBSurface(SDL_SWSURFACE, 320, 240, surfacebpp,
+                                          Rmask, Gmask, Bmask, Amask);
+
+    // Convert the LEDs surface to the destination surface format for
+    // faster blitting, and set it's color key to NOT copy 0x000000ff
+    // pixels. We couldn't do it earlier in load_bmps() because we need
+    // the g_screen_blitter format.
+    ConvertSurface(&g_other_bmps[B_OVERLAY_LEDS], g_screen_blitter->format);
+    SDL_SetColorKey(g_other_bmps[B_OVERLAY_LEDS], SDL_TRUE, 0x000000ff);
+
+    if (g_game->get_use_old_overlay()) {
+        ConvertSurface(&g_other_bmps[B_OVERLAY_LDP1450], g_screen_blitter->format);
+        SDL_SetColorKey(g_other_bmps[B_OVERLAY_LDP1450], SDL_TRUE, 0x000000ff);
+    }
+
+    // MAC: If the game uses an overlay, create a texture for it.
+    // The g_screen_blitter surface is used from game.cpp anyway, so we
+    // always create it, used or not.
+    if (g_overlay_width && g_overlay_height) {
+        g_overlay_texture =
+            SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_RGBA8888,
+                              g_texture_access, g_overlay_width, g_overlay_height);
+
+        SDL_SetTextureBlendMode(g_overlay_texture, SDL_BLENDMODE_BLEND);
+        SDL_SetTextureAlphaMod(g_overlay_texture, 0xff);
+    }
+
+    SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
+
+    SDL_RenderClear(g_renderer);
+    SDL_RenderPresent(g_renderer);
+    // NOTE: SDL Console was initialized here.
+
     notify = true;
-    return (result);
+    return true;
 }
 
 void vid_free_yuv_overlay () {
