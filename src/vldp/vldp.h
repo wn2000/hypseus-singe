@@ -34,6 +34,7 @@ extern "C" {
 // Ubuntu Linux complains with plain <SDL.h>
 // But CMake does the right thing here 
 #include <SDL.h> // only used for threading
+#include <mpeg2dec/mpeg2.h>
 
 struct yuv_buf {
     uint8_t *Y;     // Y channel
