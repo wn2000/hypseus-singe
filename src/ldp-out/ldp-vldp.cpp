@@ -144,141 +144,114 @@ ldp_vldp::~ldp_vldp() { pre_shutdown(); }
 // called when hypseus starts up
 bool ldp_vldp::init_player()
 {
-    bool result        = false;
     bool need_to_parse = false; // whether we need to parse all video
 
     // try to read in the framefile
-    if (read_frame_conversions()) {
-        // just a sanity check to make sure their frame file is correct
-        if (first_video_file_exists()) {
-            // if the last video file has not been parsed, assume none have been
-            // This is safe because if parsed, it will just skip them
-            if (!last_video_file_parsed()) {
-                printnotice("Parsing video file(s). "
-                            "This may take a while. ");
-                need_to_parse = true;
-            }
-
-            if (audio_init() && !get_quitflag()) {
-                g_local_info.prepare_frame         = prepare_frame_callback;
-                g_local_info.display_frame         = display_frame_callback;
-                g_local_info.report_parse_progress = report_parse_progress_callback;
-                g_local_info.report_mpeg_dimensions = report_mpeg_dimensions_callback;
-                g_local_info.render_blank_frame    = blank_overlay;
-                g_local_info.blank_during_searches = m_blank_on_searches;
-                g_local_info.blank_during_skips    = m_blank_on_skips;
-                g_local_info.GetTicksFunc          = GetTicksFunc;
-
-                g_vldp_info = vldp_init(&g_local_info);
-
-                // if we successfully made contact with VLDP ...
-                if (g_vldp_info != NULL) {
-                    // this number is used repeatedly, so we calculate
-                    // it once
-                    g_vertical_offset = g_game->get_video_row_offset();
-
-                    // if testing has been requested then run them ...
-                    if (m_testing) {
-                        list<string> lstrPassed, lstrFailed;
-                        run_tests(lstrPassed, lstrFailed);
-                        // run releasetest to see actual results now ...
-                        LOGI << "Run releasetest to see printed results!";
-                        set_quitflag();
-                    }
-
-                    // bPreCacheOK will be true if precaching succeeds
-                    // or is never attempted
-                    bool bPreCacheOK = true;
-
-                    // If precaching has been requested, do it now.
-                    // The check for RAM requirements is done inside the
-                    // precache_all_video function, so we don't need to
-                    // worry about that here.
-                    if (m_bPreCache) {
-                        bPreCacheOK = precache_all_video();
-                    }
-
-                    // if we need to parse all the video
-                    if (need_to_parse) {
-                        parse_all_video();
-                    }
-
-                    // if precaching succeeded or we didn't request
-                    // precaching
-                    if (bPreCacheOK) {
-                        // this is the point where blitting isn't allowed anymore
-                        blitting_allowed = false;
-
-                        // open first file so that we can draw video overlay
-                        // even if the disc is not playing
-                        if (open_and_block(m_mpeginfo[0].name)) {
-                            // although we just opened a video file, we have
-                            // not opened an audio file, so we want to force a
-                            // re-open of the same video file when we do a real
-                            // search, in order to ensure that the audio file is
-                            // opened also.
-                            m_cur_mpeg_filename = "";
-
-                            // set MPEG size ASAP in case different from
-                            // NTSC default
-                            m_discvideo_width  = g_vldp_info->w;
-                            m_discvideo_height = g_vldp_info->h;
-
-                            if (sound::is_enabled()) {
-                                struct sound::chip soundchip;
-                                soundchip.type = sound::CHIP_VLDP;
-                                // no further parameters necessary
-                                m_uSoundChipID = sound::add_chip(&soundchip);
-                            }
-
-                            result = true;
-                        } else {
-                            LOGW << fmt("LDP-VLDP: first video "
-                                        "file could not be opened!");
-                        }
-                    } // end if it's ok to proceed
-                    // else precaching failed
-                    else {
-                        LOGW << "precaching failed";
-                    }
-
-                } // end if reading the frame conversion file worked
-                else {
-                    LOGW << "vldp_init returned NULL (which shouldn't ever "
-                            "happen)";
-                }
-            } // if audio init succeeded
-            else {
-                // only report an audio problem if there is one
-                if (!get_quitflag()) {
-                    LOGW << "Could not initialize VLDP audio!";
-                }
-
-                // otherwise report that they quit
-                else {
-                    LOGI << "Quit requested, shutting down!";
-                }
-            } // end if audio init failed or if user opted to quit instead
-              // of parse
-        }     // end if first file was present (sanity check)
-        // else if first file was not found, we do just quit because an
-        // error is printed elsewhere
-    } // end if framefile was read in properly
-    else {
+    if (!read_frame_conversions()) {
         // if the user didn't specify a framefile from the command-line,
         // then give them a little hint.
+        // else the other error messages are more than sufficient
         if (!m_bFramefileSet) {
             LOGW << "You must specify a -framefile argument when using VLDP.";
         }
-        // else the other error messages are more than sufficient
+        goto fail;
     }
 
-    // if init didn't completely finish, then we need to shutdown everything
-    if (!result) {
-        shutdown_player();
+    // just a sanity check to make sure their frame file is correct
+    if (!first_video_file_exists()) {
+        goto fail;
     }
 
-    return result;
+    // if the last video file has not been parsed, assume none have been
+    // This is safe because if parsed, it will just skip them
+    if (!last_video_file_parsed()) {
+        printnotice("Parsing video file(s). "
+                    "This may take a while. ");
+        need_to_parse = true;
+    }
+
+    if (!audio_init()) {
+        LOGW << "Could not initialize VLDP audio!";
+        goto fail;
+    }
+
+    if (get_quitflag()) {
+        LOGI << "Quit requested, shutting down!";
+        goto fail;
+    }
+
+    g_local_info.prepare_frame          = prepare_frame_callback;
+    g_local_info.display_frame          = display_frame_callback;
+    g_local_info.report_parse_progress  = report_parse_progress_callback;
+    g_local_info.report_mpeg_dimensions = report_mpeg_dimensions_callback;
+    g_local_info.render_blank_frame     = blank_overlay;
+    g_local_info.blank_during_searches  = m_blank_on_searches;
+    g_local_info.blank_during_skips     = m_blank_on_skips;
+    g_local_info.GetTicksFunc           = GetTicksFunc;
+
+    g_vldp_info = vldp_init(&g_local_info);
+    if (!g_vldp_info) {
+        LOGW << "vldp_init returned NULL (which shouldn't ever happen)";
+        goto fail;
+    }
+
+    // this number is used repeatedly, so we calculate it once
+    g_vertical_offset = g_game->get_video_row_offset();
+
+    // if testing has been requested then run them ...
+    if (m_testing) {
+        list<string> lstrPassed, lstrFailed;
+        run_tests(lstrPassed, lstrFailed);
+        // run releasetest to see actual results now ...
+        LOGI << "Run releasetest to see printed results!";
+        set_quitflag();
+    }
+
+    // If precaching has been requested, do it now.
+    // The check for RAM requirements is done inside the
+    // precache_all_video function, so we don't need to
+    // worry about that here.
+    if (m_bPreCache && !precache_all_video()) {
+        LOGW << "precaching failed";
+        goto fail;
+    }
+
+    // if we need to parse all the video
+    if (need_to_parse) { parse_all_video(); }
+
+    // this is the point where blitting isn't allowed anymore
+    blitting_allowed = false;
+
+    // try to open first file so that we can draw video overlay
+    // even if the disc is not playing.
+    if (!open_and_block(m_mpeginfo[0].name)) {
+        LOGW << fmt("LDP-VLDP: first video file could not be opened: %s", m_mpeginfo[0].name.c_str());
+        goto fail;
+    }
+
+    // although we just opened a video file, we have
+    // not opened an audio file, so we want to force a
+    // re-open of the same video file when we do a real
+    // search, in order to ensure that the audio file is
+    // opened also.
+    m_cur_mpeg_filename.clear();
+
+    // set MPEG size ASAP in case different from NTSC default
+    m_discvideo_width  = g_vldp_info->w;
+    m_discvideo_height = g_vldp_info->h;
+
+    if (sound::is_enabled()) {
+        struct sound::chip soundchip;
+        soundchip.type = sound::CHIP_VLDP;
+        // no further parameters necessary
+        m_uSoundChipID = sound::add_chip(&soundchip);
+    }
+
+    return true;
+
+fail:
+    shutdown_player();
+    return false;
 }
 
 void ldp_vldp::shutdown_player()
