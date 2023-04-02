@@ -1188,91 +1188,89 @@ VLDP_BOOL ivldp_get_mpeg_frame_offsets(const char *mpeg_name)
 
 VLDP_BOOL ivldp_parse_mpeg_frame_offsets(const char *datafilename, Uint32 mpeg_size)
 {
-    VLDP_BOOL result = VLDP_TRUE;
     FILE *data_file  = fopen(datafilename, "wb"); // create file
     struct dat_header header; // header to put inside .DAT file
 
-    // if we could create the file successfully, then we need to populate it
-    if (data_file) {
-        Uint32 pos       = 0; // position in the file
-        int count        = 0;
-        int parse_result = 0;
-
-        header.version     = DAT_VERSION;
-        header.finished    = 0;
-        header.uses_fields = 0;
-        header.length = mpeg_size;
-        fwrite(&header, sizeof(header), 1, data_file);
-        // first thing that goes in the file is the .DAT header
-        // That way we can re-use the file another time with confidence that
-        // it's the right one
-
-        mpegscan::init();
-
-        g_in_info->report_parse_progress(-1); // notify other thread that we're
-                                              // starting
-
-        // keep reading the file while there is a file left to be read
-        do {
-#define PARSE_CHUNK 200000
-
-            parse_result = mpegscan::parse(data_file, PARSE_CHUNK);
-            pos += PARSE_CHUNK;
-
-            // we want to give the user updates but don't want to flood them
-            if (count > 10) {
-                count = 0;
-
-                // report progress to parent thread
-                g_in_info->report_parse_progress((double)pos / mpeg_size);
-            }
-            count++;
-
-        } while (parse_result == mpegscan::IN_PROGRESS);
-
-        g_in_info->report_parse_progress(1); // notify other thread that we're
-                                             // done
-
-        // if parse finished, then we have to update the header
-        if (parse_result != mpegscan::ERROR) {
-            header.finished    = 1;
-            header.uses_fields = 0;
-            if (parse_result == mpegscan::FINISHED_FIELDS) {
-                header.uses_fields = 1;
-            }
-            fseek(data_file, 0L, SEEK_SET);
-            fwrite(&header, sizeof(header), 1, data_file); // save changes
-        }
-
-        // we have to close data file because it's write-only
-        // and it needs to be re-opened read-only
-        fclose(data_file);
-        data_file = NULL;
-
-        // if the mpeg did not finish parsing gracefully, we've got problems
-        /* NOTE: I separated this from the other if above to guarantee that the
-         * file gets closed
-         */
-        if (parse_result == mpegscan::ERROR) {
-            fprintf(stderr, "There was an error parsing the MPEG file.\n");
-            fprintf(stderr, "Either there is a bug in the parser or the MPEG "
-                            "file is corrupt.\n");
-            fprintf(stderr, "OR the user aborted the decoding process :)\n");
-            result = VLDP_FALSE;
-            remove(datafilename);
-        }
-    } // end if we could create the file successfully
-
-    // we couldn't create data file which means no write permission probably
+    // if we couldn't create data file which means no write permission probably
     // this is probably a good time to shut VLDP down =]
-    else {
+    if (!data_file) {
         fprintf(stderr, "Could not create file %s\n", datafilename);
         fprintf(stderr, "This probably means you don't have permission to "
                         "create the file\n");
-        result = VLDP_FALSE;
+        return VLDP_FALSE;
+    }
+ 
+    // if we could create the file successfully, then we need to populate it
+
+    Uint32 pos       = 0; // position in the file
+    int count        = 0;
+    int parse_result = 0;
+
+    header.version     = DAT_VERSION;
+    header.finished    = 0;
+    header.uses_fields = 0;
+    header.length      = mpeg_size;
+    fwrite(&header, sizeof(header), 1, data_file);
+    // first thing that goes in the file is the .DAT header
+    // That way we can re-use the file another time with confidence that
+    // it's the right one
+
+    mpegscan::init();
+
+    g_in_info->report_parse_progress(-1); // notify other thread that we're
+                                          // starting
+
+    // keep reading the file while there is a file left to be read
+    constexpr int PARSE_CHUNK = 200000;
+    do {
+        parse_result = mpegscan::parse(data_file, PARSE_CHUNK);
+        pos += PARSE_CHUNK;
+
+        // we want to give the user updates but don't want to flood them
+        if (count > 10) {
+            count = 0;
+
+            // report progress to parent thread
+            g_in_info->report_parse_progress((double)pos / mpeg_size);
+        }
+        count++;
+
+    } while (parse_result == mpegscan::IN_PROGRESS);
+
+    g_in_info->report_parse_progress(1); // notify other thread that we're
+                                         // done
+
+    // if parse finished, then we have to update the header
+    if (parse_result != mpegscan::ERROR) {
+        header.finished    = 1;
+        header.uses_fields = 0;
+        if (parse_result == mpegscan::FINISHED_FIELDS) {
+            header.uses_fields = 1;
+        }
+        fseek(data_file, 0L, SEEK_SET);
+        fwrite(&header, sizeof(header), 1, data_file); // save changes
     }
 
-    return result;
+    // we have to close data file because it's write-only
+    // and it needs to be re-opened read-only
+    fclose(data_file);
+    data_file = NULL;
+
+    // if the mpeg did not finish parsing gracefully, we've got problems
+    /* NOTE: I separated this from the other if above to guarantee that the
+     * file gets closed
+     */
+    if (parse_result == mpegscan::ERROR) {
+        fprintf(stderr, "There was an error parsing the MPEG file.\n");
+        fprintf(stderr, "Either there is a bug in the parser or the MPEG "
+                        "file is corrupt.\n");
+        fprintf(stderr, "OR the user aborted the decoding process :)\n");
+        remove(datafilename);
+
+        return VLDP_FALSE;
+    }
+
+    return VLDP_TRUE;
 }
 
 VLDP_BOOL io_open(const char *cpszFilename)
@@ -1291,18 +1289,15 @@ VLDP_BOOL io_open_precached(uint32_t uIdx)
 {
     VLDP_BOOL bResult = VLDP_FALSE;
 
-    // make sure everything is closed
-    if ((!g_mpeg_handle) && (!s_bPreCacheEnabled)) {
-        // make sure index is within range ...
-        if (uIdx < s_uPreCacheIdxCount) {
-            bResult                                    = VLDP_TRUE;
-            s_uCurPreCacheIdx                          = uIdx;
-            s_bPreCacheEnabled                         = VLDP_TRUE;
-            s_sPreCacheEntries[s_uCurPreCacheIdx].uPos = 0; // rewind to
-                                                            // beginning
-        }
-        // else out of range ...
+    // make sure everything is closed and index is within range
+    if (!g_mpeg_handle && !s_bPreCacheEnabled && uIdx < s_uPreCacheIdxCount) {
+        bResult                                    = VLDP_TRUE;
+        s_uCurPreCacheIdx                          = uIdx;
+        s_bPreCacheEnabled                         = VLDP_TRUE;
+        s_sPreCacheEntries[s_uCurPreCacheIdx].uPos = 0; // rewind to
+                                                        // beginning
     }
+
     return bResult;
 }
 
@@ -1371,11 +1366,7 @@ void io_close()
 
 VLDP_BOOL io_is_open()
 {
-    VLDP_BOOL bResult = VLDP_FALSE;
-    if ((g_mpeg_handle) || (s_bPreCacheEnabled)) {
-        bResult = VLDP_TRUE;
-    }
-    return bResult;
+    return VLDP_BOOL(g_mpeg_handle || s_bPreCacheEnabled);
 }
 
 uint32_t io_length()
@@ -1399,93 +1390,7 @@ void draw_frame(const mpeg2_info_t *info)
     Sint32 actual_elapsed_ms  = 0;
     unsigned int uStallFrames = 0;
 
-    if (!(s_frames_to_skip | s_skip_all)) {
-        do {
-            VLDP_BOOL bFrameNotShownDueToCmd = VLDP_FALSE;
-
-            Sint64 s64Ms = s_uFramesShownSinceTimer;
-            s64Ms        = (s64Ms * 1000000) / g_out_info.uFpks;
-
-            correct_elapsed_ms = (Sint32)(s64Ms) + s_extra_delay_ms;
-            actual_elapsed_ms  = g_in_info->uMsTimer - s_timer;
-
-            s_extra_delay_ms = 0;
-
-            if (actual_elapsed_ms < (correct_elapsed_ms + (Sint32)g_out_info.u2milDivFpks)) {
-                int bPrepared = g_in_info->prepare_frame(
-                        info->display_fbuf->buf[0],
-                        info->display_fbuf->buf[1],
-                        info->display_fbuf->buf[2],
-                        info->sequence->width,
-                        info->sequence->chroma_width,
-                        info->sequence->chroma_width
-                    );
-                if (bPrepared) {
-#ifndef VLDP_BENCHMARK
-                    while (((Sint32)(g_in_info->uMsTimer - s_timer) < correct_elapsed_ms) &&
-                           (!bFrameNotShownDueToCmd)) {
-                        SDL_Delay(1);
-                        if (ivldp_got_new_command()) {
-                            switch (g_req_cmdORcount & 0xF0) {
-                            case VLDP_REQ_PAUSE:
-                            case VLDP_REQ_STEP_FORWARD:
-                                ivldp_respond_req_pause_or_step();
-                                break;
-                            case VLDP_REQ_SPEEDCHANGE:
-                                ivldp_respond_req_speedchange();
-                                break;
-                            case VLDP_REQ_NONE:
-                                break;
-                            default:
-                                bFrameNotShownDueToCmd = VLDP_TRUE;
-                                break;
-                            }
-                        }
-                    }
-#endif
-                    if (!bFrameNotShownDueToCmd) {
-                        g_in_info->display_frame();
-                    }
-                }
-            }
-
-            if (!bFrameNotShownDueToCmd) {
-                ++s_uFramesShownSinceTimer;
-            }
-
-            if (s_paused) {
-                paused_handler();
-            } else {
-                play_handler();
-
-                if (!s_paused) {
-                    if (uStallFrames == 0) {
-                        if (s_uPendingSkipFrame == 0) {
-                            if (!bFrameNotShownDueToCmd) {
-                                ++g_out_info.current_frame;
-
-                                if (s_stall_per_frame > 0) {
-                                    uStallFrames = s_stall_per_frame;
-                                }
-
-                                if (s_skip_per_frame > 0) {
-                                    s_frames_to_skip = s_frames_to_skip_with_inc =
-                                        s_skip_per_frame;
-                                }
-                            }
-                        } else {
-                            g_out_info.current_frame = s_uPendingSkipFrame;
-                            s_uPendingSkipFrame      = 0;
-                        }
-                    } else {
-                        --uStallFrames;
-                    }
-                }
-            }
-        } while ((s_paused || uStallFrames > 0) && !s_skip_all && !s_step_forward);
-
-        s_step_forward = 0;
-    } else {
+    if (s_frames_to_skip | s_skip_all) {
         if (s_frames_to_skip > 0) {
             --s_frames_to_skip;
             if (s_frames_to_skip_with_inc > 0) {
@@ -1493,5 +1398,88 @@ void draw_frame(const mpeg2_info_t *info)
                 ++g_out_info.current_frame;
             }
         }
+
+        return;
     }
+
+    do {
+        VLDP_BOOL bFrameNotShownDueToCmd = VLDP_FALSE;
+
+        Sint64 s64Ms = s_uFramesShownSinceTimer;
+        s64Ms        = (s64Ms * 1000000) / g_out_info.uFpks;
+
+        correct_elapsed_ms = (Sint32)(s64Ms) + s_extra_delay_ms;
+        actual_elapsed_ms  = g_in_info->uMsTimer - s_timer;
+
+        s_extra_delay_ms = 0;
+
+        if (actual_elapsed_ms < (correct_elapsed_ms + (Sint32)g_out_info.u2milDivFpks)) {
+            int bPrepared = g_in_info->prepare_frame(info->display_fbuf->buf[0],
+                                                     info->display_fbuf->buf[1],
+                                                     info->display_fbuf->buf[2],
+                                                     info->sequence->width,
+                                                     info->sequence->chroma_width,
+                                                     info->sequence->chroma_width);
+            if (bPrepared) {
+#ifndef VLDP_BENCHMARK
+                while (((Sint32)(g_in_info->uMsTimer - s_timer) < correct_elapsed_ms) &&
+                       (!bFrameNotShownDueToCmd)) {
+                    SDL_Delay(1);
+                    if (ivldp_got_new_command()) {
+                        switch (g_req_cmdORcount & 0xF0) {
+                        case VLDP_REQ_PAUSE:
+                        case VLDP_REQ_STEP_FORWARD:
+                            ivldp_respond_req_pause_or_step();
+                            break;
+                        case VLDP_REQ_SPEEDCHANGE:
+                            ivldp_respond_req_speedchange();
+                            break;
+                        case VLDP_REQ_NONE:
+                            break;
+                        default:
+                            bFrameNotShownDueToCmd = VLDP_TRUE;
+                            break;
+                        }
+                    }
+                }
+#endif
+                if (!bFrameNotShownDueToCmd) { g_in_info->display_frame(); }
+            }
+        }
+
+        if (!bFrameNotShownDueToCmd) { ++s_uFramesShownSinceTimer; }
+
+        if (s_paused) {
+            paused_handler();
+        } else {
+            play_handler();
+
+            if (s_paused) {
+                continue;
+            }
+
+            if (uStallFrames > 0) {
+                --uStallFrames;
+                continue;
+            }
+
+            if (s_uPendingSkipFrame != 0) {
+                g_out_info.current_frame = s_uPendingSkipFrame;
+                s_uPendingSkipFrame      = 0;
+                continue;
+            }
+
+            if (!bFrameNotShownDueToCmd) {
+                ++g_out_info.current_frame;
+
+                if (s_stall_per_frame > 0) { uStallFrames = s_stall_per_frame; }
+
+                if (s_skip_per_frame > 0) {
+                    s_frames_to_skip = s_frames_to_skip_with_inc = s_skip_per_frame;
+                }
+            }
+        }
+    } while ((s_paused || uStallFrames > 0) && !s_skip_all && !s_step_forward);
+
+    s_step_forward = 0;
 }
