@@ -22,8 +22,8 @@
 
 // see vldp.h for documentation on how to use the API
 
-#include <stdio.h>
-#include <string.h>
+#include <string>
+
 #include "vldp.h"
 #include "vldp_common.h"
 
@@ -43,7 +43,7 @@ Uint8 g_req_cmdORcount = CMDORCOUNT_INITIAL;  // the current command parent
                                               // thread
 unsigned int g_ack_count = ACK_COUNT_INITIAL; // the result returned by the
                                               // internal child thread
-char g_req_file[STRSIZE];                     // requested mpeg filename
+std::string g_req_file;                       // requested mpeg filename
 Uint32 g_req_timer       = 0; // requests timer value to be used for mpeg playback
 Uint32 g_req_frame       = 0; // requested frame to search to
 Uint32 g_req_min_seek_ms = 0; // seek must take at least this many milliseconds
@@ -162,7 +162,7 @@ int vldp_open(const char *filename)
         // if file exists, we can open it
         if (F) {
             fclose(F);
-            SAFE_STRCPY(g_req_file, filename, sizeof(g_req_file));
+            g_req_file = filename;
             g_req_precache = VLDP_FALSE; // we're not precaching ...
             result         = vldp_cmd(VLDP_REQ_OPEN);
         } else {
@@ -180,7 +180,7 @@ VLDP_BOOL vldp_open_precached(uint32_t uIdx, const char *filename)
     if (p_initialized) {
         // even though we're using an index, we still need filename to compute
         // .dat filename
-        SAFE_STRCPY(g_req_file, filename, sizeof(g_req_file));
+        g_req_file = filename;
         g_req_idx      = uIdx;
         g_req_precache = VLDP_TRUE;
         bResult        = vldp_cmd(VLDP_REQ_OPEN);
@@ -214,7 +214,7 @@ VLDP_BOOL vldp_precache(const char *filename)
     VLDP_BOOL bResult = VLDP_FALSE;
 
     if (p_initialized) {
-        SAFE_STRCPY(g_req_file, filename, sizeof(g_req_file));
+        g_req_file = filename;
         bResult = vldp_cmd(VLDP_REQ_PRECACHE);
     }
     // else return false

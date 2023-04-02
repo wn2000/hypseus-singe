@@ -26,6 +26,7 @@
 #ifndef VLDP_COMMON_H
 #define VLDP_COMMON_H
 
+#include <string>
 #include <SDL.h>
 #include <SDL_thread.h>
 
@@ -59,7 +60,7 @@ extern Uint32 g_req_min_seek_ms; // minimum # of milliseconds that this seek can
 extern Uint32 g_req_timer;
 extern uint32_t g_req_idx;       // multipurpose index
 extern VLDP_BOOL g_req_precache;
-extern char g_req_file[];        // which file to open
+extern std::string g_req_file;   // which file to open
 extern Uint8 g_req_cmdORcount;   // the current command count OR'd with the
                                  // current command of parent thread
                                  // made 8-bit to ensure that it's atomic

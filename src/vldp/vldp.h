@@ -44,12 +44,6 @@ struct yuv_buf {
     int UV_size;    // size in bytes of U and V
 };
 
-// safe strcpy that null-terminates the end of a string
-// Use this instead of strcpy always!
-#define SAFE_STRCPY(dst, src, size)                                            \
-    strncpy(dst, src, size);                                                   \
-    dst[size - 1] = 0;
-
 // since this is C and not C++, we can't use booleans ...
 enum { VLDP_FALSE = 0, VLDP_TRUE = 1 } typedef VLDP_BOOL;
 

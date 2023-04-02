@@ -22,23 +22,22 @@
 
 // contains the function for the VLDP private thread
 
-#include <stdio.h>
-#include <stdlib.h> // for malloc/free
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-//#include <unistd.h>
-//#include "inttypesreplace.h"
-#include <SDL.h>
-
 #include "vldp_internal.h"
 #include "vldp_common.h"
 #include "mpegscan.h"
 #include "../video/video.h"
 
+#include <string>
+#include <filesystem>
+#include <fstream>
+#include <sys/stat.h>
+
+#include <SDL.h>
 #include <inttypes.h>
 
 #include <mpeg2.h>
+
+namespace fs = std::filesystem;
 
 // NOTICE : these variables should only be used by the private thread
 // !!!!!!!!!!!!
@@ -487,13 +486,12 @@ void idle_handler_open()
 {
     int sAspect = 0;
     int dCurAspectRatio = 0;
-    char req_file[STRSIZE] = {0};
     uint32_t req_idx  = g_req_idx;
     VLDP_BOOL req_precache = g_req_precache;
     VLDP_BOOL bSuccess     = VLDP_FALSE;
 
     // after we ack the command, this string could become clobbered at any time
-    SAFE_STRCPY(req_file, g_req_file, sizeof(req_file));
+    std::string req_file = g_req_file;
 
     // NOTE : it is very important that we change our status to BUSY before
     // acknowledging the command, because our previous status could be
@@ -517,7 +515,7 @@ void idle_handler_open()
 
     // if we've been requested to open a real file ...
     if (!req_precache) {
-        bSuccess = io_open(req_file);
+        bSuccess = io_open(req_file.c_str());
     }
     // else we've been requested to open a precached file...
     else {
@@ -565,7 +563,7 @@ void idle_handler_open()
 
             // load/parse all the frame locations in the file for super fast
             // seeking
-            if (ivldp_get_mpeg_frame_offsets(req_file)) {
+            if (ivldp_get_mpeg_frame_offsets(req_file.c_str())) {
                 g_in_info->report_mpeg_dimensions(g_out_info.w, g_out_info.h); // this function creates the video overlay.
                 // We want to make sure we do this _after_ the frame offsets are
                 // loaded in because graphics are drawn to the main screen if
@@ -606,96 +604,75 @@ void idle_handler_open()
 // gets called when the user wants to precache a file ...
 void idle_handler_precache()
 {
-    char req_file[STRSIZE] = {0};
-
-    SAFE_STRCPY(req_file, g_req_file,
-                sizeof(req_file)); // after we ack the command, this string
-                                   // could become clobbered at any time
+    // save the file name, as after we ack the command, this string
+    // could become clobbered at any time.
+    std::string req_file = g_req_file;
 
     // always set the status before acknowledging the command so previous status
     // doesn't get through
     g_out_info.status = STAT_BUSY; // make us busy while opening the file
     ivldp_ack_command();
 
-    // if we still have room in our array to precache ...
-    if (s_uPreCacheIdxCount < MAX_PRECACHE_FILES) {
-        // GET LENGTH OF ACTUAL FILE
-        FILE *F = fopen(req_file, "rb");
-        if (F) {
-            struct stat filestats;
-            fstat(fileno(F), &filestats); // get stats for file to get file
-                                          // length
-            s_sPreCacheEntries[s_uPreCacheIdxCount].uLength = filestats.st_size;
-            s_sPreCacheEntries[s_uPreCacheIdxCount].uPos    = 0; // start at the
-                                                                 // beginning
-
-            // allocate RAM to hold file ...
-            s_sPreCacheEntries[s_uPreCacheIdxCount].ptrBuf = malloc(filestats.st_size);
-
-            // if malloc succeeded
-            if (s_sPreCacheEntries[s_uPreCacheIdxCount].ptrBuf) {
-                unsigned char *u8Ptr =
-                    (unsigned char *)s_sPreCacheEntries[s_uPreCacheIdxCount].ptrBuf;
-                unsigned int uTotalBytesRead = 0;
-                const unsigned int READ_SIZE = 1048576; // how many bytes to
-                                                        // read in at a time
-
-                g_in_info->report_parse_progress(-1); // notify other thread
-                                                      // that we're starting
-
-                // load in the file ...
-                for (;;) {
-                    unsigned int uBytesRead   = 0;
-                    unsigned int uBytesToRead = READ_SIZE;
-                    unsigned int uBytesLeft   = filestats.st_size - uTotalBytesRead;
-
-                    // don't overflow
-                    if (uBytesToRead > uBytesLeft) uBytesToRead = uBytesLeft;
-
-                    uBytesRead = (unsigned int)fread(u8Ptr + uTotalBytesRead, 1,
-                                                     uBytesToRead, F);
-                    uTotalBytesRead += uBytesRead;
-
-                    // if we're done ...
-                    if (uTotalBytesRead >= (unsigned int)filestats.st_size) {
-                        break;
-                    }
-
-                    // update user on our precache progress
-                    g_in_info->report_parse_progress(
-                        (double)uTotalBytesRead /
-                        s_sPreCacheEntries[s_uPreCacheIdxCount].uLength);
-                }
-
-                g_in_info->report_parse_progress(1); // notify other thread that
-                                                     // we're done ...
-
-                // notify other thread of which index we've used to precache
-                // this file
-                g_out_info.uLastCachedIndex = s_uPreCacheIdxCount;
-
-                // we're done with this entry, so the count increases
-                // (this must be done after we've read in the file so that the
-                // index is correct for that operation)
-                ++s_uPreCacheIdxCount;
-
-                g_out_info.status = STAT_STOPPED; // success
-            }
-            // else malloc failed
-            else {
-                g_out_info.status = STAT_ERROR;
-            }
-            fclose(F);
-        }
-        // else we couldn't open the file
-        else {
-            g_out_info.status = STAT_ERROR;
-        }
-    }
-    // else we're out of room, so return an error
-    else {
+    // if we're out of room, return an error.
+    if (s_uPreCacheIdxCount >= MAX_PRECACHE_FILES) {
         g_out_info.status = STAT_ERROR;
+        return;
     }
+
+    // GET LENGTH OF ACTUAL FILE
+    std::ifstream ifs(req_file);
+    if (!ifs.is_open()) {
+        g_out_info.status = STAT_ERROR;
+        return;
+    }
+
+    uint32_t filesize = (uint32_t)fs::file_size(req_file);
+
+    s_sPreCacheEntries[s_uPreCacheIdxCount].uLength = filesize;
+    s_sPreCacheEntries[s_uPreCacheIdxCount].uPos    = 0; // start at the beginning
+
+    // allocate RAM to hold file ...
+    s_sPreCacheEntries[s_uPreCacheIdxCount].ptrBuf = malloc(filesize);
+    if (!s_sPreCacheEntries[s_uPreCacheIdxCount].ptrBuf) {
+        g_out_info.status = STAT_ERROR;
+        return;
+    }
+
+    unsigned char *u8Ptr =
+        (unsigned char *)s_sPreCacheEntries[s_uPreCacheIdxCount].ptrBuf;
+    unsigned int uTotalBytesRead = 0;
+    const unsigned int READ_SIZE = 1048576; // how many bytes to
+                                            // read in at a time
+
+    g_in_info->report_parse_progress(-1); // notify other thread
+                                          // that we're starting
+
+    // load in the file ...
+    while (uTotalBytesRead < filesize) {
+        unsigned int uBytesToRead = std::min(READ_SIZE, filesize - uTotalBytesRead);
+
+        ifs.read((char *)u8Ptr, uBytesToRead);
+        uTotalBytesRead += uBytesToRead;
+        u8Ptr += uBytesToRead;
+
+        // update user on our precache progress
+        g_in_info->report_parse_progress(
+            (double)uTotalBytesRead / s_sPreCacheEntries[s_uPreCacheIdxCount].uLength);
+    }
+
+    g_in_info->report_parse_progress(1); // notify other thread that
+                                         // we're done ...
+
+    // notify other thread of which index we've used to precache
+    // this file
+    g_out_info.uLastCachedIndex = s_uPreCacheIdxCount;
+
+    // we're done with this entry, so the count increases
+    // (this must be done after we've read in the file so that the
+    // index is correct for that operation)
+    ++s_uPreCacheIdxCount;
+
+    g_out_info.status = STAT_STOPPED; // success
 }
 
 // starts playing the mpeg from the very beginning
@@ -1060,31 +1037,28 @@ void idle_handler_search(int skip)
 
 // parses an mpeg video stream to get its frame offsets, or if the parsing had
 // taken place earlier
-VLDP_BOOL ivldp_get_mpeg_frame_offsets(char *mpeg_name)
+VLDP_BOOL ivldp_get_mpeg_frame_offsets(const char *mpeg_name)
 {
-    char datafilename[320]       = {0};
     VLDP_BOOL mpeg_datafile_good = VLDP_FALSE;
     FILE *data_file              = NULL;
     VLDP_BOOL result             = VLDP_TRUE;
-    unsigned int mpeg_size       = 0;
     struct dat_header header;
 
     // GET LENGTH OF ACTUAL FILE
-    mpeg_size = io_length();
+    uint32_t mpeg_size = io_length();
 
     // change extension of file to be dat instead of (presumably) m2v
-    SAFE_STRCPY(datafilename, mpeg_name, sizeof(datafilename));
-    strcpy(&datafilename[strlen(mpeg_name) - 3], "dat");
+    std::string datafilename = fs::path(mpeg_name).replace_extension("dat").string();
 
     // loop until we get a good datafile or until we get an error
     while (!mpeg_datafile_good && result) {
-        data_file = fopen(datafilename, "rb"); // check to see if datafile
+        data_file = fopen(datafilename.c_str(), "rb"); // check to see if datafile
                                                // exists
 
         // If file cannot be opened, try to create it.
         // Most likely the file cannot be opened because it doesn't exist.
         if (!data_file) {
-            result = ivldp_parse_mpeg_frame_offsets(datafilename, mpeg_size);
+            result = ivldp_parse_mpeg_frame_offsets(datafilename.c_str(), mpeg_size);
             // we could open the file here, but there is no need to because we
             // will loop back through and open the file anyway
         }
@@ -1112,7 +1086,7 @@ VLDP_BOOL ivldp_get_mpeg_frame_offsets(char *mpeg_name)
 
                 // try to delete obsolete .DAT file so we can create a modern
                 // one
-                if (remove(datafilename) == -1) {
+                if (remove(datafilename.c_str()) == -1) {
                     fprintf(stderr, "Couldn't delete obsolete .DAT file!\n");
                     result = VLDP_FALSE;
                 }
@@ -1168,7 +1142,7 @@ VLDP_BOOL ivldp_get_mpeg_frame_offsets(char *mpeg_name)
     return result;
 }
 
-VLDP_BOOL ivldp_parse_mpeg_frame_offsets(char *datafilename, Uint32 mpeg_size)
+VLDP_BOOL ivldp_parse_mpeg_frame_offsets(const char *datafilename, Uint32 mpeg_size)
 {
     VLDP_BOOL result = VLDP_TRUE;
     FILE *data_file  = fopen(datafilename, "wb"); // create file

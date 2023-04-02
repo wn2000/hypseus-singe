@@ -61,8 +61,8 @@ void ivldp_respond_req_pause_or_step();
 void ivldp_respond_req_speedchange();
 void ivldp_render();
 void idle_handler_search(int skip);
-VLDP_BOOL ivldp_get_mpeg_frame_offsets(char *mpeg_name);
-VLDP_BOOL ivldp_parse_mpeg_frame_offsets(char *datafilename, Uint32 mpeg_size);
+VLDP_BOOL ivldp_get_mpeg_frame_offsets(const char *mpeg_name);
+VLDP_BOOL ivldp_parse_mpeg_frame_offsets(const char *datafilename, Uint32 mpeg_size);
 void ivldp_update_progress_indicator(SDL_Surface *indicator, double percentage_completed);
 
 VLDP_BOOL io_open(const char *cpszFilename);

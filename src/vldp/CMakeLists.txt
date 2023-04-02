@@ -14,4 +14,6 @@ set( LIB_HEADERS
 include_directories( ${MPEG2_INCLUDE_DIRS} )
 
 add_library( vldp ${LIB_SOURCES} ${LIB_HEADERS} )
+set_property(TARGET vldp PROPERTY CXX_STANDARD 17)
 target_link_libraries( vldp ${MPEG2_LIBRARIES} )
+
