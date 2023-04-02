@@ -144,7 +144,7 @@ int g_an_bezel_scale = 12;
 bool g_bSubtitleShown = false;
 char *subchar = NULL;
 
-string g_bezel_file = "";
+string g_bezel_file;
 
 // degrees in clockwise rotation
 SDL_RendererFlip g_flipState = SDL_FLIP_NONE;

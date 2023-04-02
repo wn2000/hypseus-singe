@@ -346,109 +346,92 @@ void game::OnLDV1000LineChange(bool bIsStatus, bool bIsEnabled)
 // palette_shutdown
 bool game::init_video()
 {
-    bool result = false;
-    int index   = 0;
-    int w;
-    int h;
-    int x;
-    int y;
-    float dx;
-    float dy;
-    float srcx;
-    float srcy;
-
     // Set up SDL display (create window, renderer, surfaces, textures...)
     video::init_display();
     // set instance variables and local variables to the actual screen (or
     // window) dimension
-    w = video::get_screen_blitter()->w;
-    h = video::get_screen_blitter()->h;
-    // if this particular game uses video overlay (most do)
-    if (m_game_uses_video_overlay) {
-        // safety check, make sure variables are initialized like we expect them
-        // to be ...
-        if ((m_video_overlay_width != 0) && (m_video_overlay_height != 0) &&
-            (m_palette_color_count != 0)) {
-            result = true; // it's easier to assume true here and find out
-                           // false, than the reverse
+    int w = video::get_screen_blitter()->w;
+    int h = video::get_screen_blitter()->h;
 
-            if (m_bFullScale) {
-                m_video_overlay_scaled =
-                    SDL_CreateRGBSurface(SDL_SWSURFACE, w, h, m_overlay_depth, 0, 0, 0, 0); // create a surface
+    // if this particular game doesn't use video overlay (most do),
+    // just return true here
+    if (!m_game_uses_video_overlay) {
+        return true;
+    }
 
-                // create matrix for scaling the overlay pixmap to the physical
-                // surface
-                // - size of overlay pixmap m_video_overlay_width x
-                // m_video_overlay_height
-                // - size of physical surface is get_screen()->w x
-                // get_screen()->h
-                // - matrix is created as 2dimensional array of "long" values,
-                // with size of
-                //   the physical surface
-                // each entry in the matrix holds an offset into the overlay
-                // pixmap array from
-                // which the pixel is copied into to the corresponding surface
-                // pixmap
-                if ((m_video_overlay_matrix =
-                         (long *)MPO_MALLOC(sizeof(long) * w * h)) == NULL) {
-                    LOGW << "MEM ERROR : malloc failed in init_video!";
-                    return false;
-                } /*endif*/
+    // safety check, make sure variables are initialized like we expect them
+    // to be ...
+    if ((m_video_overlay_width == 0) || (m_video_overlay_height == 0) || (m_palette_color_count == 0)) {
+        LOGW << "See init_video() inside game.cpp for what you need to "
+                "do to fix a problem";
+        // If your game doesn't use video overlay, set
+        // m_game_uses_video_overlay to false ...
+        return false;
+    }
 
-                dx = (float)m_video_overlay_width / (float)w;  // 256/640=0.4
-                dy = (float)m_video_overlay_height / (float)h; // 256/480=0.5333
+    bool result = true; // it's easier to assume true here and find out
+                        // false, than the reverse
 
-                srcx = 0;
-                srcy = 0;
+    if (m_bFullScale) {
+        m_video_overlay_scaled =
+            SDL_CreateRGBSurface(SDL_SWSURFACE, w, h, m_overlay_depth, 0, 0, 0, 0); // create a surface
 
-                for (y = 0; y < h; y++) {
-                    srcx = 0;
-                    for (x = 0; x < w; x++) {
-                        m_video_overlay_matrix[x + (y * w)] =
-                            (long)srcx + ((long)srcy * m_video_overlay_width);
-                        srcx += dx;
-                    } /*endfor*/
-                    srcy += dy;
-                } /*endfor*/
-            }     // end if fullscale is enabled
+        // create matrix for scaling the overlay pixmap to the physical
+        // surface
+        // - size of overlay pixmap m_video_overlay_width x
+        // m_video_overlay_height
+        // - size of physical surface is get_screen()->w x
+        // get_screen()->h
+        // - matrix is created as 2dimensional array of "long" values,
+        // with size of
+        //   the physical surface
+        // each entry in the matrix holds an offset into the overlay
+        // pixmap array from
+        // which the pixel is copied into to the corresponding surface
+        // pixmap
+        if ((m_video_overlay_matrix = (long *)MPO_MALLOC(sizeof(long) * w * h)) == NULL) {
+            LOGW << "MEM ERROR : malloc failed in init_video!";
+            return false;
+        } /*endif*/
 
-            // create each buffer
-            for (index = 0; index < m_video_overlay_count; index++) {
-                m_video_overlay[index] =
-                    SDL_CreateRGBSurface(SDL_SWSURFACE, m_video_overlay_width,
-                                         m_video_overlay_height, m_overlay_depth, 0, 0, 0, 0); // create a surface
+        float dx = (float)m_video_overlay_width / (float)w;  // 256/640=0.4
+        float dy = (float)m_video_overlay_height / (float)h; // 256/480=0.5333
 
-                // check to see if we got an error (this should never happen)
-                if (!m_video_overlay[index]) {
-                    LOGW << "ODD ERROR : SDL_CreateRGBSurface failed in init_video!";
-                    result = false;
-                }
-            }
+        float srcy = 0;
 
-            // if we created the surfaces alright, then allocate space for the
-            // color palette
-            if (result) {
-                result = palette::initialize(m_palette_color_count);
-                if (result) {
-                    palette_calculate();
-                    palette::finalize();
-                }
-            }
-        } // end if video overlay is used
+        for (int y = 0; y < h; y++) {
+            float srcx = 0;
+            for (int x = 0; x < w; x++) {
+                m_video_overlay_matrix[x + (y * w)] =
+                    (long)srcx + ((long)srcy * m_video_overlay_width);
+                srcx += dx;
+            } /*endfor*/
+            srcy += dy;
+        } /*endfor*/
+    }     // end if fullscale is enabled
 
-        // if the game has not explicitely specified those variables that we
-        // need ...
-        else {
-            LOGW << "See init_video() inside game.cpp for what you need to "
-                       "do to fix a problem";
-            // If your game doesn't use video overlay, set
-            // m_game_uses_video_overlay to false ...
+    // create each buffer
+    for (int index = 0; index < m_video_overlay_count; index++) {
+        m_video_overlay[index] =
+            SDL_CreateRGBSurface(SDL_SWSURFACE, m_video_overlay_width, m_video_overlay_height,
+                                 m_overlay_depth, 0, 0, 0, 0); // create a
+                                                               // surface
+
+        // check to see if we got an error (this should never happen)
+        if (!m_video_overlay[index]) {
+            LOGW << "ODD ERROR : SDL_CreateRGBSurface failed in init_video!";
+            result = false;
         }
-    } // end if game uses video overlay
+    }
 
-    // else game doesn't use video overlay, so we always return true here
-    else {
-        result = true;
+    // if we created the surfaces alright, then allocate space for the
+    // color palette
+    if (result) {
+        result = palette::initialize(m_palette_color_count);
+        if (result) {
+            palette_calculate();
+            palette::finalize();
+        }
     }
 
     return (result);
