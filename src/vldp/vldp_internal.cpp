@@ -900,10 +900,12 @@ void idle_handler_search(int skip)
     // status must be changed before acknowledging command, because previous
     // status could be STAT_ERROR, which causes problems with *_and_block vldp
     // API commands.
-    if (!skip) g_out_info.status = STAT_BUSY;
-    // else we're skipping
-    // (our status is already STAT_PLAYING so we don't need to set it)
-    else {
+    if (!skip) {
+        g_out_info.status = STAT_BUSY;
+    } else {
+        // else we're skipping
+        // (our status is already STAT_PLAYING so we don't need to set it)
+
         /* Since we're skipping, we must re-calculate s_uFramesShownSinceTimer
          * because it is possible on laggy systems for this value to be behind
          * what it ought to be, and we need to be perfectly in sync with the
@@ -1004,76 +1006,77 @@ void idle_handler_search(int skip)
     actual_frame = uAdjustedReqFrame;
 
     // do a bounds check
-    if (uAdjustedReqFrame < g_totalframes) {
-        proposed_pos = g_frame_position[uAdjustedReqFrame]; // get the proposed
-                                                            // position
+    if (uAdjustedReqFrame >= g_totalframes) {
+        fprintf(stderr,
+                "SEARCH ERROR : frame %u was requested, but it is out "
+                "of bounds\n",
+                req_frame);
+        g_out_info.status = STAT_ERROR;
+        return;
+    }
+
+    proposed_pos = g_frame_position[uAdjustedReqFrame]; // get the proposed
+                                                        // position
 
 #ifdef VLDP_DEBUG
-        printf("Initial proposed position is : %x\n", proposed_pos);
+    printf("Initial proposed position is : %x\n", proposed_pos);
 #endif
 
-        s_frames_to_skip = s_frames_to_skip_with_inc =
-            0; // the below problem is no longer a problem
+    s_frames_to_skip = s_frames_to_skip_with_inc = 0; // the below problem is no
+                                                      // longer a problem
 
-        // loop until we find which position in the file to seek to
-        for (;;) {
-            // if the frame we want is not an I frame, go backward until we find
-            // an I frame, and increase # of frames to skip forward
-            while ((proposed_pos == 0xFFFFFFFF) && (actual_frame > 0)) {
-                s_frames_to_skip++;
-                actual_frame--;
-                proposed_pos = g_frame_position[actual_frame];
-            }
-            skipped_I++;
+    // loop until we find which position in the file to seek to
+    for (;;) {
+        // if the frame we want is not an I frame, go backward until we find
+        // an I frame, and increase # of frames to skip forward
+        while ((proposed_pos == 0xFFFFFFFF) && (actual_frame > 0)) {
+            s_frames_to_skip++;
+            actual_frame--;
+            proposed_pos = g_frame_position[actual_frame];
+        }
+        skipped_I++;
 
-            // if we are only 2 frames away from an I frame, we will get a
-            // corrupted image and need to go back to
-            // the I frame before this one
-            if ((skipped_I < 2) && (s_frames_to_skip < 3) && (actual_frame > 0)) {
-                proposed_pos = 0xFFFFFFFF;
-            } else {
+        // if we are only 2 frames away from an I frame, we will get a
+        // corrupted image and need to go back to
+        // the I frame before this one
+        if ((skipped_I < 2) && (s_frames_to_skip < 3) && (actual_frame > 0)) {
+            proposed_pos = 0xFFFFFFFF;
+        } else {
 #ifdef VLDP_DEBUG
 //				printf("We've decided on a position within the file.\n");
 //				printf("skipped_I is %d\n", skipped_I);
 //				printf("s_frames_to_skip is %d\n", s_frames_to_skip);
 //				printf("actual_frame is %d\n", actual_frame);
 #endif
-                break;
-            }
+            break;
         }
+    }
 
 #ifdef VLDP_DEBUG
-        printf("frames_to_skip is %d, skipped_I is %d\n", s_frames_to_skip, skipped_I);
-        printf("position in mpeg2 stream we are seeking to : %x\n", proposed_pos);
+    printf("frames_to_skip is %d, skipped_I is %d\n", s_frames_to_skip, skipped_I);
+    printf("position in mpeg2 stream we are seeking to : %x\n", proposed_pos);
 #endif
 
-        io_seek(proposed_pos);
-        // go to the place in the stream where the I frame begins
-        // fseek(g_mpeg_handle, proposed_pos, SEEK_SET);
+    io_seek(proposed_pos);
+    // go to the place in the stream where the I frame begins
+    // fseek(g_mpeg_handle, proposed_pos, SEEK_SET);
 
-        // if we're seeking, we can change the frame right now ...
-        if (!skip) {
-            g_out_info.current_frame =
-                req_frame; // this is no longer incremented in draw_frame
-                           // due to s_paused being set
-            s_uPendingSkipFrame = 0;
-        }
-        // if we're skipping, we have to leave the current frame alone until it
-        // changes, in order to be consistent with actual laserdisc behavior.
-        else {
-            s_uPendingSkipFrame = req_frame;
-        }
-
-        s_blanked = 0; // we want to see the frame
-
-        ivldp_render();
-    } // end if the bounds check passed
-    else {
-        fprintf(stderr, "SEARCH ERROR : frame %u was requested, but it is out "
-                        "of bounds\n",
-                req_frame);
-        g_out_info.status = STAT_ERROR;
+    // if we're seeking, we can change the frame right now ...
+    if (!skip) {
+        g_out_info.current_frame = req_frame; // this is no longer incremented
+                                              // in draw_frame due to s_paused
+                                              // being set
+        s_uPendingSkipFrame = 0;
     }
+    // if we're skipping, we have to leave the current frame alone until it
+    // changes, in order to be consistent with actual laserdisc behavior.
+    else {
+        s_uPendingSkipFrame = req_frame;
+    }
+
+    s_blanked = 0; // we want to see the frame
+
+    ivldp_render();
 }
 
 // parses an mpeg video stream to get its frame offsets, or if the parsing had
