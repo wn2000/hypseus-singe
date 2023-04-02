@@ -22,6 +22,7 @@
 
 // see vldp.h for documentation on how to use the API
 
+#include <chrono>
 #include <string>
 
 #include "vldp.h"
@@ -38,11 +39,16 @@ SDL_Thread *private_thread = NULL;
 
 int p_initialized = 0; // whether VLDP has been initialized
 
-Uint8 g_req_cmdORcount = CMDORCOUNT_INITIAL;  // the current command parent
-                                              // thread requests of the child
-                                              // thread
-unsigned int g_ack_count = ACK_COUNT_INITIAL; // the result returned by the
-                                              // internal child thread
+// the current command parent thread requests of the child thread
+std::atomic<Uint8> g_req_cmdORcount{CMDORCOUNT_INITIAL};
+
+// the result returned by the internal child thread
+std::atomic<unsigned int> g_ack_count{ACK_COUNT_INITIAL};
+
+std::mutex g_mutex;
+std::condition_variable g_cv_cmd_pending;
+std::condition_variable g_cv_cmd_acked;
+
 std::string g_req_file;                       // requested mpeg filename
 Uint32 g_req_timer       = 0; // requests timer value to be used for mpeg playback
 Uint32 g_req_frame       = 0; // requested frame to search to
@@ -67,28 +73,27 @@ const struct vldp_in_info *g_in_info; // contains info from parent thread that
 // requested command, only that the command has been received
 VLDP_BOOL vldp_cmd(int cmd)
 {
-    VLDP_BOOL result = VLDP_FALSE;
-    Uint32 cur_time  = g_in_info->GetTicksFunc();
-    Uint8 tmp        = g_req_cmdORcount; // we want to replace the real value
-                                  // atomically so we use a tmp variable first
     static unsigned int old_ack_count = ACK_COUNT_INITIAL;
 
+    VLDP_BOOL result = VLDP_FALSE;
+
+    Uint8 tmp = g_req_cmdORcount; // we want to replace the real value
+                                  // atomically so we use a tmp variable first
     tmp++; // increment the counter so child thread knows we're issuing a new
            // command
     tmp &= 0xF;             // strip off old command
     tmp |= cmd;             // replace it with new command
-    g_req_cmdORcount = tmp; // here is the atomic replacement
+    g_req_cmdORcount = tmp;
+    g_cv_cmd_pending.notify_one();
 
-    // loop until we timeout or get a response
-    while ((g_in_info->GetTicksFunc() - cur_time) < VLDP_TIMEOUT) {
-        // if the count has changed, it means the other thread has acknowledged
-        // our new command
-        if (g_ack_count != old_ack_count) {
+    // wait for command ack
+    {
+        std::unique_lock<std::mutex> lk(g_mutex);
+        if (g_cv_cmd_acked.wait_for(lk, std::chrono::milliseconds(VLDP_TIMEOUT),
+                                    [] { return g_ack_count != old_ack_count; })) {
             result        = VLDP_TRUE;
-            old_ack_count = g_ack_count; // prepare to receive the next command
-            break;
+            old_ack_count = g_ack_count;
         }
-        SDL_Delay(0); // switch to other thread
     }
 
     // if we weren't able to communicate, notify user

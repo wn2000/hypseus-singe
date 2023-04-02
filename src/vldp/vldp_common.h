@@ -26,7 +26,11 @@
 #ifndef VLDP_COMMON_H
 #define VLDP_COMMON_H
 
+#include <atomic>
+#include <condition_variable>
 #include <string>
+#include <thread>
+
 #include <SDL.h>
 #include <SDL_thread.h>
 
@@ -61,10 +65,14 @@ extern Uint32 g_req_timer;
 extern uint32_t g_req_idx;       // multipurpose index
 extern VLDP_BOOL g_req_precache;
 extern std::string g_req_file;   // which file to open
-extern Uint8 g_req_cmdORcount;   // the current command count OR'd with the
-                                 // current command of parent thread
-                                 // made 8-bit to ensure that it's atomic
-extern unsigned int g_ack_count; // how many times we've acknowledged a command
+
+extern std::atomic<Uint8> g_req_cmdORcount;   // the current command count OR'd with the
+                                              // current command of parent thread
+                                              // made 8-bit to ensure that it's atomic
+extern std::atomic<unsigned int> g_ack_count; // how many times we've acknowledged a command
+extern std::mutex g_mutex;
+extern std::condition_variable g_cv_cmd_pending;
+extern std::condition_variable g_cv_cmd_acked;
 
 extern struct vldp_out_info g_out_info; // contains info that the parent thread
                                         // should have access to

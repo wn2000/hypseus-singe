@@ -127,6 +127,52 @@ int idle_handler(void *surface)
     // unless we are drawing video to the screen, we just sit here
     // and listen for orders from the parent thread
     while (!done) {
+        bool has_new_cmd = false;
+        {
+            std::unique_lock<std::mutex> lk(g_mutex);
+            has_new_cmd = g_cv_cmd_pending.wait_for(lk, std::chrono::milliseconds(16),
+                                                    ivldp_got_new_command);
+        }
+
+        if (has_new_cmd) {
+            // examine the actual command (strip off the count)
+            uint8_t cmd = g_req_cmdORcount & 0xF0;
+
+            if (cmd == VLDP_REQ_QUIT) {
+                done = 1;
+            } else if (cmd == VLDP_REQ_OPEN) {
+                idle_handler_open();
+            } else if (cmd == VLDP_REQ_PRECACHE) {
+                idle_handler_precache();
+            } else if (cmd == VLDP_REQ_PLAY) {
+                idle_handler_play();
+            } else if (cmd == VLDP_REQ_SEARCH) {
+                idle_handler_search(0);
+            } else if (cmd == VLDP_REQ_SKIP) {
+                idle_handler_search(1);
+            } else if (cmd == VLDP_REQ_PAUSE) {
+                // pause command while we're already idle?
+                // this is an error
+                g_out_info.status = STAT_ERROR;
+                ivldp_ack_command();
+            } else if (cmd == VLDP_REQ_STOP) {
+                // stop command while we're already idle?
+                // this is an error
+                g_out_info.status = STAT_ERROR;
+                ivldp_ack_command();
+            } else if (cmd == VLDP_REQ_LOCK) {
+                ivldp_lock_handler();
+            } else {
+                fprintf(stderr, "VLDP WARNING : Idle handler received command "
+                                "which it is ignoring\n");
+            }
+        } else {
+            g_in_info->render_blank_frame(); // This makes sure that the video
+                                             // overlay gets drawn even if there
+                                             // is no video being played
+        }
+
+#if 0
         // while we have received new commands to be processed
         // (so we don't go to sleep on skips)
         while (ivldp_got_new_command() && !done) {
@@ -181,7 +227,7 @@ int idle_handler(void *surface)
          * NOTE : we want to delay for about 1 frame (or field) here
          */
         SDL_Delay(16); // 1 field is 16.666ms assuming 60 hz
-
+#endif
     } // end while we have not received a quit command
 
     io_close();
@@ -209,16 +255,9 @@ int idle_handler(void *surface)
 }
 
 // returns 1 if there is a new command waiting for us or 0 otherwise
-int ivldp_got_new_command()
+bool ivldp_got_new_command()
 {
-    int result = 0;
-
-    // if they are no longer equal
-    if (g_req_cmdORcount != s_old_req_cmdORcount) {
-        result = 1;
-    }
-
-    return result;
+    return (g_req_cmdORcount != s_old_req_cmdORcount);
 }
 
 // acknowledges a command sent by the parent thread
@@ -227,7 +266,9 @@ int ivldp_got_new_command()
 void ivldp_ack_command()
 {
     s_old_req_cmdORcount = g_req_cmdORcount;
+
     g_ack_count++; // here is where we acknowledge
+    g_cv_cmd_acked.notify_one();
 }
 
 void ivldp_lock_handler()
@@ -244,7 +285,8 @@ void ivldp_lock_handler()
         while (bLocked == VLDP_TRUE) {
             SDL_Delay(1);
             if (ivldp_got_new_command()) {
-                switch (g_req_cmdORcount & 0xF0) {
+                uint8_t cmd = g_req_cmdORcount;
+                switch (cmd & 0xF0) {
                 case VLDP_REQ_UNLOCK:
 #ifdef VLDP_DEBUG
                     fprintf(stderr, "DBG: VLDP REQ UNLOCK RECEIVED!!!\n");
@@ -255,7 +297,7 @@ void ivldp_lock_handler()
                 default:
                     fprintf(stderr, "WARNING : lock handler received a command "
                                     "%x that wasn't to unlock it\n",
-                            g_req_cmdORcount);
+                            cmd);
                     break;
                 }
             }
@@ -287,8 +329,9 @@ void paused_handler()
 
     // if we have a new command coming in
     if (ivldp_got_new_command()) {
+        uint8_t cmd = g_req_cmdORcount;
         // strip off the count and examine the command
-        switch (g_req_cmdORcount & 0xF0) {
+        switch (cmd & 0xF0) {
         case VLDP_REQ_PLAY:
             ivldp_respond_req_play();
             break;
@@ -317,7 +360,7 @@ void paused_handler()
                  // know how to handle, just ignore it
             fprintf(stderr, "WARNING : pause handler received command %x that "
                             "it is ignoring\n",
-                    g_req_cmdORcount);
+                    cmd);
             ivldp_ack_command(); // acknowledge the command
             break;
         } // end switch

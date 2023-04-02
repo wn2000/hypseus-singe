@@ -46,7 +46,7 @@ struct precache_entry_s {
 
 int idle_handler(void *surface);
 void blank_video();
-int ivldp_got_new_command();
+bool ivldp_got_new_command();
 void ivldp_ack_command();
 void ivldp_lock_handler();
 void paused_handler();
