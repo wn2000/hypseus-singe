@@ -565,80 +565,78 @@ void idle_handler_open()
         bSuccess = io_open_precached(req_idx);
     }
 
-    // If file was opened successfully, check to make sure it's a video stream
-    // and also get framerate
-    if (bSuccess) {
-        Uint8 small_buf[8];
-        io_read(small_buf, sizeof(small_buf)); // 1st 8 bytes reveal much
-
-        // if we find the proper mpeg2 video header at the beginning of the file
-        if (((small_buf[0] << 24) | (small_buf[1] << 16) | (small_buf[2] << 8) |
-             small_buf[3]) == 0x000001B3) {
-            g_out_info.w =
-                (small_buf[4] << 4) | (small_buf[5] >> 4); // get mpeg width
-            g_out_info.h =
-                ((small_buf[5] & 0x0F) << 8) | small_buf[6]; // get mpeg height
-            ivldp_set_framerate(small_buf[7] & 0xF); // set the framerate
-
-            // Look for aspect ratio meta field - thanks to walknight
-            sAspect = small_buf[7] >> 4;
-
-            switch (sAspect) {
-            case 2:
-               dCurAspectRatio = ASPECTSD;
-               video::set_aspect_change((g_out_info.h * 4) / 3, g_out_info.h);
-               break;
-            case 3:
-               dCurAspectRatio = ASPECTWS;
-               video::set_aspect_change((g_out_info.h * 16) / 9, g_out_info.h);
-               break;
-            default:
-               dCurAspectRatio = (int)(((double)g_out_info.w / g_out_info.h) * 100);
-               break;
-            }
-
-            // Send media info to video::
-            video::set_aspect_ratio(dCurAspectRatio);
-            video::set_detected_height((int)g_out_info.h);
-            video::set_detected_width((int)g_out_info.w);
-
-            io_seek(0); // go back to beginning for parser's benefit
-
-            // load/parse all the frame locations in the file for super fast
-            // seeking
-            if (ivldp_get_mpeg_frame_offsets(req_file.c_str())) {
-                g_in_info->report_mpeg_dimensions(g_out_info.w, g_out_info.h); // this function creates the video overlay.
-                // We want to make sure we do this _after_ the frame offsets are
-                // loaded in because graphics are drawn to the main screen if
-                // parsing needs to be done.
-
-                vldp_cache_sequence_header(); // cache sequence header for
-                                              // faster seeking
-
-                io_seek(0); // seek back to beginning of file
-
-                g_out_info.status = STAT_STOPPED; // now that the file is open,
-                                                  // we're ready to play
-            } else {
-                io_close();
-                fprintf(stderr,
-                        "VLDP PARSE ERROR : Is the video stream damaged?\n");
-                g_out_info.status = STAT_ERROR; // change from BUSY to ERROR
-            }
-        } // end if a proper mpeg header was found
-
-        // if the file had a bad header
-        else {
-            io_close();
-            fprintf(stderr, "VLDP ERROR : Did not find expected header.  Is "
-                            "this mpeg stream demultiplexed??\n");
-            g_out_info.status = STAT_ERROR;
-        }
-    } // end if file exists
-    else {
+    if (!bSuccess) {
         fprintf(stderr, "VLDP ERROR : Could not open file!\n");
         g_out_info.status = STAT_ERROR;
+        return;
     }
+
+    // If file was opened successfully, check to make sure it's a video stream
+    // and also get framerate
+    Uint8 small_buf[8];
+    io_read(small_buf, sizeof(small_buf)); // 1st 8 bytes reveal much
+
+    // see if we can find the proper mpeg2 video header at the beginning of the file
+    if (((small_buf[0] << 24) | (small_buf[1] << 16) | (small_buf[2] << 8) |
+         small_buf[3]) != 0x000001B3) {
+        io_close();
+        fprintf(stderr, "VLDP ERROR : Did not find expected header.  Is "
+                        "this mpeg stream demultiplexed??\n");
+        g_out_info.status = STAT_ERROR;
+        return;
+    }
+
+    // get mpeg width and height
+    g_out_info.w = (small_buf[4] << 4) | (small_buf[5] >> 4);
+    g_out_info.h = ((small_buf[5] & 0x0F) << 8) | small_buf[6];
+
+    ivldp_set_framerate(small_buf[7] & 0xF); // set the framerate
+
+    // Look for aspect ratio meta field - thanks to walknight
+    sAspect = small_buf[7] >> 4;
+
+    switch (sAspect) {
+    case 2:
+        dCurAspectRatio = ASPECTSD;
+        video::set_aspect_change((g_out_info.h * 4) / 3, g_out_info.h);
+        break;
+    case 3:
+        dCurAspectRatio = ASPECTWS;
+        video::set_aspect_change((g_out_info.h * 16) / 9, g_out_info.h);
+        break;
+    default:
+        dCurAspectRatio = (int)(((double)g_out_info.w / g_out_info.h) * 100);
+        break;
+    }
+
+    // Send media info to video::
+    video::set_aspect_ratio(dCurAspectRatio);
+    video::set_detected_height((int)g_out_info.h);
+    video::set_detected_width((int)g_out_info.w);
+
+    io_seek(0); // go back to beginning for parser's benefit
+
+    // try to load/parse all the frame locations in the file for super fast seeking
+    if (!ivldp_get_mpeg_frame_offsets(req_file.c_str())) {
+        io_close();
+        fprintf(stderr, "VLDP PARSE ERROR : Is the video stream damaged?\n");
+        g_out_info.status = STAT_ERROR; // change from BUSY to ERROR
+        return;
+    }
+
+    // this function creates the video overlay.
+    g_in_info->report_mpeg_dimensions(g_out_info.w, g_out_info.h);
+
+    // We want to make sure we do this _after_ the frame offsets are
+    // loaded in because graphics are drawn to the main screen if
+    // parsing needs to be done.
+    vldp_cache_sequence_header(); // cache sequence header for
+                                  // faster seeking
+
+    io_seek(0); // seek back to beginning of file
+
+    g_out_info.status = STAT_STOPPED; // now that the file is open,
+                                      // we're ready to play
 #ifdef VLDP_DEBUG
     printf("idle_handler_open returning ...\n");
 #endif
