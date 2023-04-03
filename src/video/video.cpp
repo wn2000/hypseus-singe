@@ -457,10 +457,12 @@ bool init_display()
     int fs = get_draw_width() / 36;
     int ffs = g_aspect_ratio == ASPECTWS ? get_draw_width() / 24 : get_draw_width() / 18;
 
+    FC_FreeFont(g_font);
     g_font = FC_CreateFont();
     FC_LoadFont(g_font, g_renderer, "fonts/default.ttf", fs,
                 FC_MakeColor(0xff, 0xff, 0xff, 0xff), TTF_STYLE_NORMAL);
 
+    FC_FreeFont(g_fixfont);
     g_fixfont = FC_CreateFont();
     FC_LoadFont(g_fixfont, g_renderer, "fonts/timewarp.ttf", ffs,
                 FC_MakeColor(0xff, 0xff, 0xff, 0xff), TTF_STYLE_NORMAL);
