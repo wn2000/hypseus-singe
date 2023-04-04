@@ -825,30 +825,24 @@ void draw_overlay_leds(unsigned int values[], int num_digits,
 // Draw LDP1450 overlay characters to the screen - rewrite for SDL2 (DBX)
 void draw_charline_LDP1450(char *LDP1450_String, int start_x, int y)
 {
-    float x;
-    int i, j = 0;
-    int LDP1450_strlen;
     int index = (int)((y / OVERLAY_LDP1450_HEIGHT) + 0.5f);
-
     LDP1450_CharSet[index].enable = false;
-    LDP1450_strlen = strlen(LDP1450_String);
 
+    int LDP1450_strlen = strlen(LDP1450_String);
     if (!LDP1450_strlen)
     {
         return;
     }
-    else {
-	if (LDP1450_strlen <= 11)
-        {
-            for (i = LDP1450_strlen; i <= 11; i++)
-                 LDP1450_String[i] = 32;
 
-            LDP1450_strlen = strlen(LDP1450_String);
-        }
+    if (LDP1450_strlen <= 11) {
+        for (int i = LDP1450_strlen; i <= 11; i++) LDP1450_String[i] = 32;
+
+        LDP1450_strlen = strlen(LDP1450_String);
     }
 
     g_LDP1450_overlay = true;
 
+    float x = 0;
     switch(g_aspect_ratio)
     {
        case ASPECTWS:
@@ -862,7 +856,8 @@ void draw_charline_LDP1450(char *LDP1450_String, int start_x, int y)
           break;
     }
 
-    for (i = 0; i < LDP1450_strlen; i++)
+    int j = 0;
+    for (int i = 0; i < LDP1450_strlen; i++)
     {
          if (LDP1450_String[i] == 0x13)
              LDP1450_String[i] = 0x5f;
@@ -873,7 +868,7 @@ void draw_charline_LDP1450(char *LDP1450_String, int start_x, int y)
     if (j > 0) {
         LDP1450_CharSet[index].enable = true;
         LDP1450_CharSet[index].x = x;
-        LDP1450_CharSet[index].y = (y * (double)(get_draw_height() * 0.004f));
+        LDP1450_CharSet[index].y = y * (double)(get_draw_height() * 0.004f);
         LDP1450_CharSet[index].OVERLAY_LDP1450_String = LDP1450_String;
     }
 }
@@ -883,7 +878,6 @@ void draw_singleline_LDP1450(char *LDP1450_String, int start_x, int y)
     SDL_Rect src, dest;
 
     int i = 0;
-    int value = 0;
     int LDP1450_strlen;
     g_scoreboard_needs_update = true;
 
@@ -920,17 +914,17 @@ void draw_singleline_LDP1450(char *LDP1450_String, int start_x, int y)
 
     for (i=0; i<LDP1450_strlen; i++)
     {
-         value = LDP1450_String[i];
+        char value = LDP1450_String[i];
 
-         if (value >= 0x26 && value <= 0x39) value -= 0x25;
-         else if (value >= 0x41 && value <= 0x5a) value -= 0x2a;
-         else if (value == 0x13) value = 0x32;
-         else value = 0x31;
+        if (value >= 0x26 && value <= 0x39) value -= 0x25;
+        else if (value >= 'A' && value <= 'Z') value -= 0x2a;
+        else if (value == 0x13) value = 0x32; // is this supposed to be 13 ('\r') and 32 (' ')?
+        else value = 0x31;
 
-         src.x = value * OVERLAY_LDP1450_WIDTH;
-         SDL_FillRect(g_leds_surface, &dest, 0x00000000);
-         SDL_BlitSurface(g_other_bmps[B_OVERLAY_LDP1450], &src, g_leds_surface, &dest);
-         dest.x += OVERLAY_LDP1450_CHARACTER_SPACING;
+        src.x = value * OVERLAY_LDP1450_WIDTH;
+        SDL_FillRect(g_leds_surface, &dest, 0x00000000);
+        SDL_BlitSurface(g_other_bmps[B_OVERLAY_LDP1450], &src, g_leds_surface, &dest);
+        dest.x += OVERLAY_LDP1450_CHARACTER_SPACING;
     }
 }
 
@@ -957,17 +951,14 @@ bool draw_othergfx(int which, int x, int y)
 // de-allocates all of the .bmps that we have allocated
 void free_bmps()
 {
-
-    int nuke_index = 0;
-
     // get rid of all the LED's
-    for (; nuke_index < LED_RANGE; nuke_index++) {
-        free_one_bmp(g_led_bmps[nuke_index]);
+    for (int i = 0; i < LED_RANGE; i++) {
+        free_one_bmp(g_led_bmps[i]);
     }
-    for (nuke_index = 0; nuke_index < B_EMPTY; nuke_index++) {
+    for (int i = 0; i < B_EMPTY; i++) {
         // check to make sure it exists before we try to free
-        if (g_other_bmps[nuke_index]) {
-            free_one_bmp(g_other_bmps[nuke_index]);
+        if (g_other_bmps[i]) {
+            free_one_bmp(g_other_bmps[i]);
         }
     }
 }
@@ -1161,7 +1152,7 @@ void draw_LDP1450_overlay()
 		FC_Draw(g_fixfont, g_renderer,
 		   LDP1450_CharSet[i].x, LDP1450_CharSet[i].y,
 		   LDP1450_CharSet[i].OVERLAY_LDP1450_String);
-	}
+        }
     }
 }
 
@@ -1371,23 +1362,25 @@ void vid_blit () {
     // Does YUV texture need update from the YUV "surface"?
     // Don't try if the vldp object didn't call setup_yuv_surface (in noldp mode)
     if (g_yuv_surface) {
-	SDL_LockMutex(g_yuv_surface->mutex);
-	if (g_yuv_video_needs_update) {
-	    // If we don't have a YUV texture yet (we may be here for the first time or the vldp could have
-	    // ordered it's destruction in the mpeg_callback function because video dimensions have changed),
-	    // create it now. Dimensions were passed to the video object (this) by the vldp object earlier,
-	    // using vid_setup_yuv_texture()
-	    if (!g_yuv_texture) {
-		g_yuv_texture = vid_create_yuv_texture(g_yuv_surface->width, g_yuv_surface->height);
-	    }
+        SDL_LockMutex(g_yuv_surface->mutex);
+        if (g_yuv_video_needs_update) {
+            // If we don't have a YUV texture yet (we may be here for the first time
+            // or the vldp could have ordered it's destruction in the mpeg_callback
+            // function because video dimensions have changed), create it now.
+            // Dimensions were passed to the video object (this) by the vldp object
+            // earlier, using vid_setup_yuv_texture()
+            if (!g_yuv_texture) {
+                g_yuv_texture = vid_create_yuv_texture(g_yuv_surface->width,
+                        g_yuv_surface->height);
+            }
 
-	    SDL_UpdateYUVTexture(g_yuv_texture, NULL,
-		g_yuv_surface->Yplane, g_yuv_surface->Ypitch,
-		g_yuv_surface->Uplane, g_yuv_surface->Vpitch,
-		g_yuv_surface->Vplane, g_yuv_surface->Vpitch);
-	    g_yuv_video_needs_update = false;
-	}
-	SDL_UnlockMutex(g_yuv_surface->mutex);
+            SDL_UpdateYUVTexture(g_yuv_texture, NULL, g_yuv_surface->Yplane,
+                    g_yuv_surface->Ypitch, g_yuv_surface->Uplane,
+                    g_yuv_surface->Vpitch, g_yuv_surface->Vplane,
+                    g_yuv_surface->Vpitch);
+            g_yuv_video_needs_update = false;
+        }
+        SDL_UnlockMutex(g_yuv_surface->mutex);
     }
 
     // Does OVERLAY texture need update from the scoreboard surface?
@@ -1401,7 +1394,7 @@ void vid_blit () {
         SDL_UpdateTexture(g_overlay_texture, &g_overlay_size_rect,
 	    (void *)g_screen_blitter->pixels, g_screen_blitter->pitch);
 
-	g_overlay_needs_update = false;
+        g_overlay_needs_update = false;
     }
 
     // Sadly, we have to RenderCopy the YUV texture on every blitting strike, because
