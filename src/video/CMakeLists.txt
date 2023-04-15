@@ -1,4 +1,5 @@
 set( LIB_SOURCES
+    drawlist.cpp
     video.cpp
     tms9128nl.cpp
     SDL_FontCache.c
@@ -6,9 +7,12 @@ set( LIB_SOURCES
     palette.cpp
     rgb2yuv.cpp
     rgb2yuv-gas.s
+    transform.cpp
+    overlay.cpp
 )
 
-set( LIB_HEADERS
+set(LIB_HEADERS
+    drawlist.h
     led.h
     palette.h
     rgb2yuv.h
@@ -23,3 +27,4 @@ set_source_files_properties(video.cpp PROPERTIES COMPILE_FLAGS -Wno-unused-const
 
 add_library( video ${LIB_SOURCES} ${LIB_HEADERS} )
 target_link_libraries( video plog )
+

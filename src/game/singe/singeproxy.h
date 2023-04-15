@@ -20,11 +20,8 @@
  * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
-#include <stdlib.h>
-#include <stdarg.h>
-#include <string.h>
-
 #include "../../vldp/vldp.h"  // to get the vldp structs
+#include "../../video/overlay.h"
 
 // by RDG2010
 // Ubuntu Linux complains if SDL includes are used with quotes.
@@ -51,7 +48,7 @@ unsigned char sep_byte_clip(int value);
 void          sep_call_lua(const char *func, const char *sig, ...);
 void          sep_capture_vldp();
 void          sep_die(const char *fmt, ...);
-void          sep_do_blit(SDL_Surface *srfDest);
+void          sep_do_blit(Overlay *dest);
 void          sep_do_mouse_move(Uint16 x, Uint16 y, Sint16 xrel, Sint16 yrel, Sint8 mouseID);
 void          sep_error(const char *fmt, ...);
 int           sep_lua_error(lua_State *L);

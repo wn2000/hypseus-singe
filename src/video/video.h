@@ -36,6 +36,7 @@
 #define ASPECTWS 178 // Round up
 #define NOSQUARE 0x2D0
 
+#include "overlay.h"
 #include "SDL_FontCache.h"
 #include <SDL.h>
 
@@ -124,9 +125,9 @@ void draw_singleline_LDP1450(char *LDP1450_String, int start_x, int y);
 void draw_charline_LDP1450(char *LDP1450_String, int start_x, int y);
 bool draw_othergfx(int which, int x, int y);
 void free_bmps();
-SDL_Surface *load_one_bmp(const char *);
-SDL_Surface *load_one_png(const char *);
-void free_one_bmp(SDL_Surface *);
+SDL_Texture *load_one_bmp(const char *);
+SDL_Texture *load_one_png(const char *);
+void free_one_bmp(SDL_Texture *);
 void draw_rectangle(short x, short y, unsigned short w, unsigned short h,
                     unsigned char red, unsigned char green, unsigned char blue);
 SDL_Window *get_window();
@@ -136,6 +137,7 @@ SDL_Texture *get_yuv_screen();
 SDL_Surface *get_screen_blitter();
 SDL_Surface *get_screen_leds();
 FC_Font *get_font();
+FC_Font *get_tt_font();
 bool get_opengl();
 bool get_vulkan();
 bool get_fullscreen();
@@ -145,6 +147,8 @@ bool get_video_timer_blank();
 void set_opengl(bool value);
 void set_vulkan(bool value);
 int get_textureaccess();
+
+void set_virtual_screen_overlay(::Overlay *overlay);
 void set_textureaccess(int value);
 void set_grabmouse(bool value);
 void set_vsync(bool value);
@@ -170,6 +174,7 @@ void set_video_height(Uint16);
 void draw_scanlines(int, int, int);
 void draw_border(int, int);
 void draw_string(const char *, int, int, SDL_Surface *);
+void draw_string(const char *, int, int, Overlay *);
 void draw_subtitle(char *, bool ins);
 void draw_LDP1450_overlay();
 void vid_toggle_fullscreen();

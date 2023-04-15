@@ -25,6 +25,7 @@
 
 #include "../../video/video.h"
 #include "../../sound/sound.h"
+#include "../../my_unique_ptr.h"
 
 #include <string>
 #include <vector>
@@ -42,11 +43,12 @@ typedef struct g_soundType {
 
 // These are pointers and values needed by the script engine to interact with Hypseus
 lua_State    *g_se_lua_context;
-SDL_Surface  *g_se_surface        = NULL;
 int           g_se_overlay_width;
 int           g_se_overlay_height;
 double       *g_se_disc_fps;
 unsigned int *g_se_uDiscFPKS;
+
+static Overlay overlay;
 
 // used to know whether try to shutdown lua would crash
 bool g_bLuaInitialized = false;
@@ -62,7 +64,8 @@ SDL_Color             g_colorForeground     = {255, 255, 255, 0};
 SDL_Color             g_colorBackground     = {0, 0, 0, 0};
 vector<TTF_Font *>    g_fontList;
 vector<g_soundT>      g_soundList;
-vector<SDL_Surface *> g_spriteList;
+
+vector<SDL_Texture_Ptr> g_spriteList;
 int                   g_fontCurrent         = -1;
 int                   g_fontQuality         =  1;
 double                g_sep_overlay_scale_x =  1;
@@ -251,12 +254,19 @@ void sep_die(const char *fmt, ...)
 	g_pSingeIn->set_quitflag();
 }
 
-void sep_do_blit(SDL_Surface *srfDest)
+void sep_do_blit(Overlay * dest)
 {
-	if (g_upgrade_overlay)
-	    sep_format_srf32(g_se_surface, srfDest);
-	else
-	    sep_srf32_to_srf8(g_se_surface, srfDest);
+  if (dest->Width() != overlay.Width() || dest->Height() != overlay.Height())
+  {
+        dest->SetSize(overlay.Width(), overlay.Height());
+  }
+  dest->GetDrawList() = std::move(overlay.GetDrawList());
+  overlay.GetDrawList().Clear();
+
+    // if (g_upgrade_overlay)
+    //     sep_format_srf32(g_se_surface, srfDest);
+    // else
+    //     sep_srf32_to_srf8(g_se_surface, srfDest);
 }
 
 void sep_do_mouse_move(Uint16 x, Uint16 y, Sint16 xrel, Sint16 yrel, Sint8 mouseID)
@@ -355,43 +365,46 @@ void sep_set_static_pointers(double *m_disc_fps, unsigned int *m_uDiscFPKS)
 
 void sep_set_surface(int width, int height)
 {
-	bool createSurface = false;
-	
 	g_se_overlay_height = height;
 	g_se_overlay_width = width;
+
+    // bool createSurface = false;
+    // if (g_se_surface == NULL) {
+    //     createSurface = true;
+    // } else {
+    //     if ((g_se_surface->w != g_se_overlay_width) ||
+    //         (g_se_surface->h != g_se_overlay_height)) {
+    //             SDL_FreeSurface(g_se_surface);
+    //             createSurface = true;
+    //     }
+    // }
+
+    // if (createSurface) {
+    //     g_se_surface = SDL_CreateRGBSurface(0, g_se_overlay_width, g_se_overlay_height,
+    //                                         32, 0xFF, 0xFF00, 0xFF0000, 0xFF000000);
+    // }
+    g_sep_overlay_scale_x =
+        (double)g_se_overlay_width / (double)g_pSingeIn->get_video_width();
+    g_sep_overlay_scale_y =
+        (double)g_se_overlay_height / (double)g_pSingeIn->get_video_height();
 	
-	if (g_se_surface == NULL) {
-		createSurface = true;
-	} else {
-		if ((g_se_surface->w != g_se_overlay_width) || (g_se_surface->h != g_se_overlay_height))
-		{
-			SDL_FreeSurface(g_se_surface);
-			createSurface = true;
-		}
-	}
-	
-	if (createSurface) {
-		g_se_surface = SDL_CreateRGBSurface(0, g_se_overlay_width, g_se_overlay_height, 32, 0xFF, 0xFF00, 0xFF0000, 0xFF000000);
-		g_sep_overlay_scale_x = (double)g_se_overlay_width / (double)g_pSingeIn->get_video_width();
-		g_sep_overlay_scale_y = (double)g_se_overlay_height / (double)g_pSingeIn->get_video_height();
-	}
+	overlay.SetSize(width, height);
 }
 
 void sep_shutdown(void)
 {
-	sep_release_vldp();
-	
-	sep_unload_fonts();
-	sep_unload_sounds();
-	sep_unload_sprites();
-	
-  TTF_Quit();
+    sep_release_vldp();
 
-  if (g_bLuaInitialized)
-  {
-	lua_close(g_se_lua_context);
-	g_bLuaInitialized = false;
-  }
+    sep_unload_fonts();
+    sep_unload_sounds();
+    sep_unload_sprites();
+
+    TTF_Quit();
+
+    if (g_bLuaInitialized) {
+        lua_close(g_se_lua_context);
+        g_bLuaInitialized = false;
+    }
 }
 
 void sep_sound_ended(Uint8 *buffer, unsigned int slot)
@@ -413,6 +426,7 @@ void sep_sound_ended(Uint8 *buffer, unsigned int slot)
 	
 }
 
+#if 0
 bool sep_srf32_to_srf8(SDL_Surface *src, SDL_Surface *dst)
 {
 	bool bResult = false;
@@ -559,142 +573,120 @@ bool sep_format_srf32(SDL_Surface *src, SDL_Surface *dst)
 
 	return bResult;
 }
+#endif
 
 void sep_startup(const char *script)
 {
-  g_se_lua_context = lua_open();
-  luaL_openlibs(g_se_lua_context);
-  lua_atpanic(g_se_lua_context, sep_lua_error);
+    g_se_lua_context = lua_open();
+    luaL_openlibs(g_se_lua_context);
+    lua_atpanic(g_se_lua_context, sep_lua_error);
 
-  lua_register(g_se_lua_context, "colorBackground",    sep_color_set_backcolor);
-  lua_register(g_se_lua_context, "colorForeground",    sep_color_set_forecolor);
+    lua_register(g_se_lua_context, "colorBackground", sep_color_set_backcolor);
+    lua_register(g_se_lua_context, "colorForeground", sep_color_set_forecolor);
 
-  lua_register(g_se_lua_context, "hypseusGetHeight",    sep_hypseus_get_height);
-  lua_register(g_se_lua_context, "hypseusGetWidth",     sep_hypseus_get_width);
-  lua_register(g_se_lua_context, "hypseusScreenshot",   sep_screenshot);
+    lua_register(g_se_lua_context, "hypseusGetHeight", sep_hypseus_get_height);
+    lua_register(g_se_lua_context, "hypseusGetWidth", sep_hypseus_get_width);
+    lua_register(g_se_lua_context, "hypseusScreenshot", sep_screenshot);
 
-  lua_register(g_se_lua_context, "debugPrint",         sep_debug_say);
+    lua_register(g_se_lua_context, "debugPrint", sep_debug_say);
 
-  lua_register(g_se_lua_context, "discAudio",          sep_audio_control);
-  lua_register(g_se_lua_context, "discChangeSpeed",    sep_change_speed);
-  lua_register(g_se_lua_context, "discGetFrame",       sep_get_current_frame);
-  lua_register(g_se_lua_context, "discPause",          sep_pause);
-  lua_register(g_se_lua_context, "discPlay",           sep_play);
-  lua_register(g_se_lua_context, "discSearch",         sep_search);
-  lua_register(g_se_lua_context, "discSearchBlanking", sep_search_blanking);
-  lua_register(g_se_lua_context, "discSetFPS",         sep_set_disc_fps);
-  lua_register(g_se_lua_context, "discSkipBackward",   sep_skip_backward);
-  lua_register(g_se_lua_context, "discSkipBlanking",   sep_skip_blanking);
-  lua_register(g_se_lua_context, "discSkipForward",    sep_skip_forward);
-  lua_register(g_se_lua_context, "discSkipToFrame",    sep_skip_to_frame);
-  lua_register(g_se_lua_context, "discStepBackward",   sep_step_backward);
-  lua_register(g_se_lua_context, "discStepForward",    sep_step_forward);
-  lua_register(g_se_lua_context, "discStop",           sep_stop);
+    lua_register(g_se_lua_context, "discAudio", sep_audio_control);
+    lua_register(g_se_lua_context, "discChangeSpeed", sep_change_speed);
+    lua_register(g_se_lua_context, "discGetFrame", sep_get_current_frame);
+    lua_register(g_se_lua_context, "discPause", sep_pause);
+    lua_register(g_se_lua_context, "discPlay", sep_play);
+    lua_register(g_se_lua_context, "discSearch", sep_search);
+    lua_register(g_se_lua_context, "discSearchBlanking", sep_search_blanking);
+    lua_register(g_se_lua_context, "discSetFPS", sep_set_disc_fps);
+    lua_register(g_se_lua_context, "discSkipBackward", sep_skip_backward);
+    lua_register(g_se_lua_context, "discSkipBlanking", sep_skip_blanking);
+    lua_register(g_se_lua_context, "discSkipForward", sep_skip_forward);
+    lua_register(g_se_lua_context, "discSkipToFrame", sep_skip_to_frame);
+    lua_register(g_se_lua_context, "discStepBackward", sep_step_backward);
+    lua_register(g_se_lua_context, "discStepForward", sep_step_forward);
+    lua_register(g_se_lua_context, "discStop", sep_stop);
 
-  lua_register(g_se_lua_context, "fontLoad",           sep_font_load);
-  lua_register(g_se_lua_context, "fontPrint",          sep_say_font);
-  lua_register(g_se_lua_context, "fontQuality",        sep_font_quality);
-  lua_register(g_se_lua_context, "fontSelect",         sep_font_select);
-  lua_register(g_se_lua_context, "fontToSprite",       sep_font_sprite);
+    lua_register(g_se_lua_context, "fontLoad", sep_font_load);
+    lua_register(g_se_lua_context, "fontPrint", sep_say_font);
+    lua_register(g_se_lua_context, "fontQuality", sep_font_quality);
+    lua_register(g_se_lua_context, "fontSelect", sep_font_select);
+    lua_register(g_se_lua_context, "fontToSprite", sep_font_sprite);
 
-  lua_register(g_se_lua_context, "overlayClear",       sep_overlay_clear);
-  lua_register(g_se_lua_context, "overlayGetHeight",   sep_get_overlay_height);
-  lua_register(g_se_lua_context, "overlayGetWidth",    sep_get_overlay_width);
-  lua_register(g_se_lua_context, "overlayPrint",       sep_say);
-	
-  lua_register(g_se_lua_context, "soundLoad",        sep_sound_load);
-  lua_register(g_se_lua_context, "soundPlay",        sep_sound_play);
-  lua_register(g_se_lua_context, "soundPause",       sep_sound_pause);
-  lua_register(g_se_lua_context, "soundResume",      sep_sound_resume);
-  lua_register(g_se_lua_context, "soundIsPlaying",   sep_sound_get_flag);
-  lua_register(g_se_lua_context, "soundStop",        sep_sound_stop);
-  lua_register(g_se_lua_context, "soundFullStop",    sep_sound_flush_queue);
+    lua_register(g_se_lua_context, "overlayClear", sep_overlay_clear);
+    lua_register(g_se_lua_context, "overlayGetHeight", sep_get_overlay_height);
+    lua_register(g_se_lua_context, "overlayGetWidth", sep_get_overlay_width);
+    lua_register(g_se_lua_context, "overlayPrint", sep_say);
 
-  lua_register(g_se_lua_context, "spriteDraw",       sep_sprite_draw);
-  lua_register(g_se_lua_context, "spriteGetHeight",  sep_sprite_height);
-  lua_register(g_se_lua_context, "spriteGetWidth",   sep_sprite_width);
-  lua_register(g_se_lua_context, "spriteLoad",       sep_sprite_load);
+    lua_register(g_se_lua_context, "soundLoad", sep_sound_load);
+    lua_register(g_se_lua_context, "soundPlay", sep_sound_play);
+    lua_register(g_se_lua_context, "soundPause", sep_sound_pause);
+    lua_register(g_se_lua_context, "soundResume", sep_sound_resume);
+    lua_register(g_se_lua_context, "soundIsPlaying", sep_sound_get_flag);
+    lua_register(g_se_lua_context, "soundStop", sep_sound_stop);
+    lua_register(g_se_lua_context, "soundFullStop", sep_sound_flush_queue);
 
-  lua_register(g_se_lua_context, "vldpGetHeight",      sep_mpeg_get_height);
-  lua_register(g_se_lua_context, "vldpGetPixel",       sep_mpeg_get_pixel);
-  lua_register(g_se_lua_context, "vldpGetWidth",       sep_mpeg_get_width);
-  lua_register(g_se_lua_context, "vldpSetVerbose",     sep_ldp_verbose);  
+    lua_register(g_se_lua_context, "spriteDraw", sep_sprite_draw);
+    lua_register(g_se_lua_context, "spriteGetHeight", sep_sprite_height);
+    lua_register(g_se_lua_context, "spriteGetWidth", sep_sprite_width);
+    lua_register(g_se_lua_context, "spriteLoad", sep_sprite_load);
 
-  // Singe 2
-  lua_register(g_se_lua_context, "overlaySetResolution",   sep_singe_two_pseudo_call_true);
-  lua_register(g_se_lua_context, "singeSetGameName",       sep_singe_two_pseudo_call_true);
-  lua_register(g_se_lua_context, "onOverlayUpdate",        sep_singe_two_pseudo_call_true);
-  lua_register(g_se_lua_context, "singeWantsCrosshairs",   sep_singe_wants_crosshair);
-  lua_register(g_se_lua_context, "mouseHowMany",           sep_get_number_of_mice);
-  lua_register(g_se_lua_context, "ratioGetX",              sep_get_xratio);
-  lua_register(g_se_lua_context, "ratioGetY",              sep_get_yratio);
+    lua_register(g_se_lua_context, "vldpGetHeight", sep_mpeg_get_height);
+    lua_register(g_se_lua_context, "vldpGetPixel", sep_mpeg_get_pixel);
+    lua_register(g_se_lua_context, "vldpGetWidth", sep_mpeg_get_width);
+    lua_register(g_se_lua_context, "vldpSetVerbose", sep_ldp_verbose);
 
-  // by RDG2010
-  lua_register(g_se_lua_context, "keyboardGetMode",    sep_keyboard_get_mode); 
-  lua_register(g_se_lua_context, "keyboardSetMode",    sep_keyboard_set_mode);
-  lua_register(g_se_lua_context, "discGetState",       sep_get_vldp_state);  
-  lua_register(g_se_lua_context, "singeGetPauseFlag",  sep_get_pause_flag);
-  lua_register(g_se_lua_context, "singeSetPauseFlag",  sep_set_pause_flag);
-  lua_register(g_se_lua_context, "singeQuit",          sep_singe_quit);
-  lua_register(g_se_lua_context, "singeVersion",       sep_singe_version);  
-  
-  //////////////////
+    // Singe 2
+    lua_register(g_se_lua_context, "overlaySetResolution", sep_singe_two_pseudo_call_true);
+    lua_register(g_se_lua_context, "singeSetGameName", sep_singe_two_pseudo_call_true);
+    lua_register(g_se_lua_context, "onOverlayUpdate", sep_singe_two_pseudo_call_true);
+    lua_register(g_se_lua_context, "singeWantsCrosshairs", sep_singe_wants_crosshair);
+    lua_register(g_se_lua_context, "mouseHowMany", sep_get_number_of_mice);
+    lua_register(g_se_lua_context, "ratioGetX", sep_get_xratio);
+    lua_register(g_se_lua_context, "ratioGetY", sep_get_yratio);
 
-  if (TTF_Init() < 0)
-  {
-    sep_die("Unable to initialize font library.");
-  }
-	sep_capture_vldp();
+    // by RDG2010
+    lua_register(g_se_lua_context, "keyboardGetMode", sep_keyboard_get_mode);
+    lua_register(g_se_lua_context, "keyboardSetMode", sep_keyboard_set_mode);
+    lua_register(g_se_lua_context, "discGetState", sep_get_vldp_state);
+    lua_register(g_se_lua_context, "singeGetPauseFlag", sep_get_pause_flag);
+    lua_register(g_se_lua_context, "singeSetPauseFlag", sep_set_pause_flag);
+    lua_register(g_se_lua_context, "singeQuit", sep_singe_quit);
+    lua_register(g_se_lua_context, "singeVersion", sep_singe_version);
 
-	g_bLuaInitialized = true;
+    //////////////////
 
-  if (g_pSingeIn->get_retro_path()) sep_set_retropath();
+    if (TTF_Init() < 0) { sep_die("Unable to initialize font library."); }
+    sep_capture_vldp();
 
-  if (luaL_dofile(g_se_lua_context, script) != 0)
-  {
-	sep_error("error compiling script: %s", lua_tostring(g_se_lua_context, -1));
-	sep_die("Cannot continue, quitting...");
-	g_bLuaInitialized = false;
-  }
+    g_bLuaInitialized = true;
+
+    if (g_pSingeIn->get_retro_path()) sep_set_retropath();
+
+    if (luaL_dofile(g_se_lua_context, script) != 0) {
+        sep_error("error compiling script: %s", lua_tostring(g_se_lua_context, -1));
+        sep_die("Cannot continue, quitting...");
+        g_bLuaInitialized = false;
+    }
 }
-
 
 void sep_unload_fonts(void)
 {
-  int x;
-
-  if (g_fontList.size() > 0)
-	{
-    for (x=0; x<(int)g_fontList.size(); x++)
-      TTF_CloseFont(g_fontList[x]);
-		g_fontList.clear();
-	}
+  for (TTF_Font *font : g_fontList) {
+	TTF_CloseFont(font);
+  }
+  g_fontList.clear();
 }
 
 void sep_unload_sounds(void)
 {
-  int x;
-
   g_pSingeIn->samples_flush_queue();
-
-  if (g_soundList.size() > 0)
-	{
-    for (x=0; x<(int)g_soundList.size(); x++)
-			SDL_FreeWAV(g_soundList[x].buffer);
-		g_soundList.clear();
-	}
+  for (g_soundT &s : g_soundList) SDL_FreeWAV(s.buffer);
+  g_soundList.clear();
 }
 
 void sep_unload_sprites(void)
 {
-  int x;
-
-  if (g_spriteList.size() > 0)
-	{
-    for (x=0; x<(int)g_spriteList.size(); x++)
-			SDL_FreeSurface(g_spriteList[x]);
-		g_spriteList.clear();
-	}
+    g_spriteList.clear();
 }
 
 void sep_alter_lua_clock(bool s)
@@ -733,34 +725,22 @@ void sep_overlay_resize(void)
 static int sep_audio_control(lua_State *L)
 {
   int n = lua_gettop(L);
-  int channel = 0;
-  bool onOff = false;
-  
-  if (n == 2)
-    if (lua_isnumber(L, 1))
-      if (lua_isboolean(L, 2))
-      {
-        channel = lua_tonumber(L, 1);
-        onOff = lua_toboolean(L, 2);
-        if (onOff)
-          if (channel == 1)
-		  {
-            g_pSingeIn->enable_audio1();
-		  }
-          else
-		  {
-           g_pSingeIn->enable_audio2();
-		  }
-        else
-          if (channel == 1)
-		  {
-           g_pSingeIn->disable_audio1();
-		  }
-          else
-		  {
-           g_pSingeIn->disable_audio2();
-		  }
+
+  if (n == 2 && lua_type(L, 1) == LUA_TNUMBER && lua_isboolean(L, 2)) {
+    int channel = lua_tonumber(L, 1);
+    bool onOff = lua_toboolean(L, 2);
+    if (onOff) {
+      if (channel == 1) {
+        g_pSingeIn->enable_audio1();
+      } else {
+        g_pSingeIn->enable_audio2();
       }
+    } else if (channel == 1) {
+      g_pSingeIn->disable_audio1();
+    } else {
+      g_pSingeIn->disable_audio2();
+    }
+  }
 
   return 0;
 }
@@ -768,13 +748,10 @@ static int sep_audio_control(lua_State *L)
 static int sep_change_speed(lua_State *L)
 {
   int n = lua_gettop(L);
-  
-  if (n == 2)
-    if (lua_isnumber(L, 1))
-      if (lua_isnumber(L, 2))
-	  {
-        g_pSingeIn->pre_change_speed(lua_tonumber(L, 1), lua_tonumber(L, 2));
-	  }
+
+  if (n == 2 && lua_type(L, 1) == LUA_TNUMBER && lua_type(L, 2) == LUA_TNUMBER) {
+    g_pSingeIn->pre_change_speed(lua_tonumber(L, 1), lua_tonumber(L, 2));
+  }
 
   return 0;
 }
@@ -782,37 +759,31 @@ static int sep_change_speed(lua_State *L)
 static int sep_color_set_backcolor(lua_State *L)
 {
   int n = lua_gettop(L);
-  
-  if (n == 3)
-    if (lua_isnumber(L, 1))
-      if (lua_isnumber(L, 2))
-				if (lua_isnumber(L, 3))
-				{
-					g_colorBackground.r = (char)lua_tonumber(L, 1);
-					g_colorBackground.g = (char)lua_tonumber(L, 2);
-					g_colorBackground.b = (char)lua_tonumber(L, 3);
-					g_colorBackground.a = (char)0;
-				}
-					
-	return 0;
+
+  if (n == 3 && lua_type(L, 1) == LUA_TNUMBER &&
+      lua_type(L, 2) == LUA_TNUMBER && lua_type(L, 3) == LUA_TNUMBER) {
+    g_colorBackground.r = (char)lua_tonumber(L, 1);
+    g_colorBackground.g = (char)lua_tonumber(L, 2);
+    g_colorBackground.b = (char)lua_tonumber(L, 3);
+    g_colorBackground.a = (char)0;
+  }
+
+  return 0;
 }
 
 static int sep_color_set_forecolor(lua_State *L)
 {
   int n = lua_gettop(L);
-  
-  if (n == 3)
-    if (lua_isnumber(L, 1))
-      if (lua_isnumber(L, 2))
-				if (lua_isnumber(L, 3))
-				{
-					g_colorForeground.r = (char)lua_tonumber(L, 1);
-					g_colorForeground.g = (char)lua_tonumber(L, 2);
-					g_colorForeground.b = (char)lua_tonumber(L, 3);
-					g_colorForeground.a = (char)0;
-				}
 
-	return 0;
+  if (n == 3 && lua_type(L, 1) == LUA_TNUMBER &&
+      lua_type(L, 2) == LUA_TNUMBER && lua_type(L, 3) == LUA_TNUMBER) {
+    g_colorForeground.r = (char)lua_tonumber(L, 1);
+    g_colorForeground.g = (char)lua_tonumber(L, 2);
+    g_colorForeground.b = (char)lua_tonumber(L, 3);
+    g_colorForeground.a = (char)0;
+  }
+
+  return 0;
 }
 
 static int sep_hypseus_get_height(lua_State *L)
@@ -831,53 +802,51 @@ static int sep_debug_say(lua_State *L)
 {
   int n = lua_gettop(L);
 	
-  if (n == 1)
-    if (lua_isstring(L, 1))
-			sep_print("%s", lua_tostring(L, 1));
-			
-	return 0;
+  if (n == 1 && lua_type(L, 1) == LUA_TSTRING)
+    sep_print("%s", lua_tostring(L, 1));
+
+  return 0;
 }
 
 static int sep_font_load(lua_State *L)
 {
-    int n      = lua_gettop(L);
-    int result = -1;
+  int n = lua_gettop(L);
+  int result = -1;
 
-    if (n == 2 && lua_type(L, 1) == LUA_TSTRING && lua_type(L, 2) == LUA_TNUMBER) {
-        std::string fontpath = lua_tostring(L, 1);
+  if (n == 2 && lua_type(L, 1) == LUA_TSTRING && lua_type(L, 2) == LUA_TNUMBER) {
+    std::string fontpath = lua_tostring(L, 1);
 
-        if (g_pSingeIn->get_retro_path()) {
-            char filepath[RETRO_MAXPATH]{};
-            int len = std::min((int)fontpath.size() + RETRO_PAD, RETRO_MAXPATH);
-            lua_retropath(fontpath.c_str(), filepath, len);
-            fontpath = filepath;
-        }
-
-        int points = lua_tonumber(L, 2);
-
-        // Load this font.
-        TTF_Font *temp = TTF_OpenFont(fontpath.c_str(), points);
-        if (temp) {
-            // Make it the current font and mark it as loaded.
-            g_fontList.push_back(temp);
-            g_fontCurrent = g_fontList.size() - 1;
-            result        = g_fontCurrent;
-        } else {
-            sep_die("Unable to load font: %s", fontpath.c_str());
-        }
+    if (g_pSingeIn->get_retro_path()) {
+      char filepath[RETRO_MAXPATH]{};
+      int len = std::min((int)fontpath.size() + RETRO_PAD, RETRO_MAXPATH);
+      lua_retropath(fontpath.c_str(), filepath, len);
+      fontpath = filepath;
     }
 
-    lua_pushnumber(L, result);
-    return 1;
+    int points = lua_tonumber(L, 2);
+
+    // Load this font.
+    TTF_Font *temp = TTF_OpenFont(fontpath.c_str(), points);
+    if (temp) {
+      // Make it the current font and mark it as loaded.
+      g_fontList.push_back(temp);
+      g_fontCurrent = g_fontList.size() - 1;
+      result        = g_fontCurrent;
+    } else {
+      sep_die("Unable to load font: %s", fontpath.c_str());
+    }
+  }
+
+  lua_pushnumber(L, result);
+  return 1;
 }
 
 static int sep_font_quality(lua_State *L)
 {
   int n = lua_gettop(L);
 
-  if (n == 1)
-    if (lua_isnumber(L, 1))
-      g_fontQuality = lua_tonumber(L, 1);
+  if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+    g_fontQuality = lua_tonumber(L, 1);
 
   return 0;
 }
@@ -885,15 +854,12 @@ static int sep_font_quality(lua_State *L)
 static int sep_font_select(lua_State *L)
 {
   int n = lua_gettop(L);
-  int fontIndex = -1;
 
-  if (n == 1)
-    if (lua_isnumber(L, 1))
-    {
-      fontIndex = lua_tonumber(L, 1);
-      if (fontIndex < (int)g_fontList.size())
-        g_fontCurrent = fontIndex;
-    }
+  if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+  {
+    int fontIndex = lua_tonumber(L, 1);
+    if (fontIndex < g_fontList.size()) g_fontCurrent = fontIndex;
+  }
 
   return 0;
 }
@@ -901,41 +867,32 @@ static int sep_font_select(lua_State *L)
 static int sep_font_sprite(lua_State *L)
 {
   int n = lua_gettop(L);
-	int result = -1;
-	
-  if (n == 1)
-		if (lua_isstring(L, 1))
-			if (g_fontCurrent >= 0) {
-				SDL_Surface *textsurface = NULL;
-				textsurface = SDL_ConvertSurface(textsurface, g_se_surface->format, 0);
-				const char *message = lua_tostring(L, 1);
-				TTF_Font *font = g_fontList[g_fontCurrent];
-				
-				switch (g_fontQuality) {
-					case 1:
-						textsurface = TTF_RenderText_Solid(font, message, g_colorForeground);
-						break;
-					
-					case 2:
-						textsurface = TTF_RenderText_Shaded(font, message, g_colorForeground, g_colorBackground);
-						break;
-					
-					case 3:
-						textsurface = TTF_RenderText_Blended(font, message, g_colorForeground);
-						break;
-				}
-				
-				if (!(textsurface)) {
-					sep_die("Font surface is null!");
-				} else {
+  int result = -1;
 
-					SDL_SetSurfaceRLE(textsurface, SDL_TRUE);
-					SDL_SetColorKey(textsurface, SDL_TRUE, 0x0);
+  if (n == 1 && lua_type(L, 1) == LUA_TSTRING && g_fontCurrent >= 0) {
+    const char *message = lua_tostring(L, 1);
+    TTF_Font *font = g_fontList[g_fontCurrent];
+    
+	SDL_Surface_Ptr textsurface;
+    if (g_fontQuality == 1) {
+      textsurface.reset(TTF_RenderText_Solid(font, message, g_colorForeground));
+    } else if (g_fontQuality == 2) {
+      textsurface.reset(TTF_RenderText_Shaded(font, message, g_colorForeground,
+                                              g_colorBackground));
+	} else if (g_fontQuality == 3) {
+      textsurface.reset(TTF_RenderText_Blended(font, message, g_colorForeground));
+    }
 
-					g_spriteList.push_back(textsurface);
-					result = g_spriteList.size() - 1;
-				}
-			}
+    if (!textsurface) {
+      sep_die("Font surface is null!");
+    } else {
+	  SDL_Texture_Ptr text_texture(SDL_CreateTextureFromSurface(video::get_renderer(), textsurface.get()));
+      // SDL_SetSurfaceRLE(textsurface, SDL_TRUE);
+      // SDL_SetColorKey(textsurface, SDL_TRUE, 0x0);
+      g_spriteList.push_back(std::move(text_texture));
+      result = g_spriteList.size() - 1;
+    }
+  }
 
   lua_pushnumber(L, result);
   return 1;
@@ -967,77 +924,73 @@ static int sep_mpeg_get_height(lua_State *L)
 
 static int sep_mpeg_get_pixel(lua_State *L)
 {
-        Uint32 format;
-        int32_t  n                   = lua_gettop(L);
-        bool     result              = false;
-        static bool ex               = false;
-        SDL_Renderer *g_renderer     = video::get_renderer();
-        SDL_Texture  *g_texture      = video::get_yuv_screen();
-        SDL_QueryTexture(g_texture, &format, NULL, NULL, NULL);
-        unsigned char pixel[SDL_BYTESPERPIXEL(format)];
-        unsigned char R;
-        unsigned char G;
-        unsigned char B;
-        SDL_Rect rect;
-        int Y;
-        int U;
-        int V;
+  int32_t n                = lua_gettop(L);
+  bool result              = false;
+  static bool ex           = false;
 
-        if (n == 2) {
-                if (lua_isnumber(L, 1)) {
-                        if (lua_isnumber(L, 2)) {
+  if (n == 2 && lua_type(L, 1) == LUA_TNUMBER && lua_type(L, 2) == LUA_TNUMBER) {
+    SDL_Rect rect;
+    rect.h = 1;
+    rect.w = 1;
+    if (!ex) sep_print("sep_mpeg_get_pixel()");
+    rect.x = (int)((double)lua_tonumber(L, 1) *
+                   ((double)g_pSingeIn->g_vldp_info->w / (double)g_se_overlay_width));
+    rect.y = (int)((double)lua_tonumber(L, 2) *
+                   ((double)g_pSingeIn->g_vldp_info->h / (double)g_se_overlay_height));
 
-				rect.h = 1;
-				rect.w = 1;
-				if (!ex) sep_print("sep_mpeg_get_pixel()");
-				rect.x = (int)((double)lua_tonumber(L, 1) * ((double)g_pSingeIn->g_vldp_info->w
-                                              / (double)g_se_overlay_width));
-				rect.y = (int)((double)lua_tonumber(L, 2) * ((double)g_pSingeIn->g_vldp_info->h
-                                              / (double)g_se_overlay_height));
-				if (g_renderer && g_texture) {
-					if (SDL_SetRenderTarget(g_renderer, g_texture) < 0) {
-                                            if (!ex) {
-						sep_print("get_pixel unsupported texture: Targets disabled");
-						sep_print("Could not RenderTarget in get_pixel: %s", SDL_GetError());
-                                            }
-                                            lua_State* X = luaL_newstate();
-                                            lua_pushinteger(X, 70);
-                                            lua_pushinteger(X, 10);
-                                            lua_pushstring(X, "Targets disabled");
-                                            sep_say_font(X);
-					} else {
-                                            if (SDL_RenderReadPixels(g_renderer, &rect, format,
-                                                              pixel, SDL_BYTESPERPIXEL(format)) < 0)
-						  sep_die("Could not ReadPixel in get_pixel: %s", SDL_GetError());
-					}
-					SDL_SetRenderTarget(g_renderer, NULL);
-				} else {
-					sep_die("Could not initialize get_pixel");
-				}
-				Y = pixel[0] - 16;
-				U = (int)rand()% 6 + (-3);
-				V = (int)rand()% 6 + (-3);
-				R = sep_byte_clip(( 298 * Y           + 409 * V + 128) >> 8);
-				G = sep_byte_clip(( 298 * Y - 100 * U - 208 * V + 128) >> 8);
-				B = sep_byte_clip(( 298 * Y + 516 * U           + 128) >> 8);
-				result = true;
-			}
-		}
-	}
+    SDL_Renderer *g_renderer = video::get_renderer();
+    SDL_Texture *g_texture   = video::get_yuv_screen();
 
-	if (result) {
-		lua_pushnumber(L, (int)R);
-		lua_pushnumber(L, (int)G);
-		lua_pushnumber(L, (int)B);
-	} else {
-		lua_pushnumber(L, -1);
-		lua_pushnumber(L, -1);
-		lua_pushnumber(L, -1);
-	}
-	ex = true;
-	return 3;
+    if (g_renderer && g_texture) {
+      Uint32 format;
+      SDL_QueryTexture(g_texture, &format, NULL, NULL, NULL);
+      unsigned char pixel[SDL_BYTESPERPIXEL(format)];
+
+      if (SDL_SetRenderTarget(g_renderer, g_texture) < 0) {
+        if (!ex) {
+            sep_print("get_pixel unsupported texture: Targets disabled");
+            sep_print("Could not RenderTarget in get_pixel: %s", SDL_GetError());
+        }
+        lua_State *X = luaL_newstate();
+        lua_pushinteger(X, 70);
+        lua_pushinteger(X, 10);
+        lua_pushstring(X, "Targets disabled");
+        sep_say_font(X);
+      } else {
+        if (SDL_RenderReadPixels(g_renderer, &rect, format, pixel,
+                                 SDL_BYTESPERPIXEL(format)) < 0) {
+            sep_die("Could not ReadPixel in get_pixel: %s", SDL_GetError());
+        } else {
+            int Y = pixel[0] - 16;
+            int U = (int)rand() % 6 + (-3);
+            int V = (int)rand() % 6 + (-3);
+            uint8_t R = sep_byte_clip((298 * Y + 409 * V + 128) >> 8);
+            uint8_t G = sep_byte_clip((298 * Y - 100 * U - 208 * V + 128) >> 8);
+            uint8_t B = sep_byte_clip((298 * Y + 516 * U + 128) >> 8);
+
+            lua_pushnumber(L, (int)R);
+            lua_pushnumber(L, (int)G);
+            lua_pushnumber(L, (int)B);
+
+			result = true;
+        }
+      }
+
+      SDL_SetRenderTarget(g_renderer, NULL);
+    } else {
+      sep_die("Could not initialize get_pixel");
+    }
+  }
+
+  if (!result) {
+    lua_pushnumber(L, -1);
+    lua_pushnumber(L, -1);
+    lua_pushnumber(L, -1);
+  }
+
+  ex = true;
+  return 3;
 }
-
 
 static int sep_singe_two_pseudo_call_true(lua_State *L)
 {
@@ -1071,8 +1024,9 @@ static int sep_mpeg_get_width(lua_State *L)
 
 static int sep_overlay_clear(lua_State *L)
 {
-	SDL_FillRect(g_se_surface, NULL, 0);
-	return 0;
+  // SDL_FillRect(g_se_surface, NULL, 0);
+  overlay.GetDrawList().Clear();
+  return 0;
 }
 
 static int sep_pause(lua_State *L)
@@ -1094,12 +1048,12 @@ static int sep_play(lua_State *L)
 static int sep_say(lua_State *L)
 {
   int n = lua_gettop(L);
-	  
-  if (n == 3)
-    if (lua_isnumber(L, 1))
-      if (lua_isnumber(L, 2))
-        if (lua_isstring(L, 3))
-					g_pSingeIn->draw_string((char *)lua_tostring(L, 3), lua_tonumber(L, 1), lua_tonumber(L, 2), g_se_surface);
+  if (n != 3) return 0;
+
+  if (lua_type(L, 1) == LUA_TNUMBER && lua_type(L, 2) == LUA_TNUMBER && lua_type(L, 3) == LUA_TSTRING) {
+    g_pSingeIn->draw_string((char *)lua_tostring(L, 3), lua_tonumber(L, 1),
+                            lua_tonumber(L, 2), &overlay);
+  }
 
   return 0;
 }
@@ -1107,72 +1061,64 @@ static int sep_say(lua_State *L)
 static int sep_say_font(lua_State *L)
 {
   int n = lua_gettop(L);
-	  
-  if (n == 3)
-    if (lua_isnumber(L, 1))
-      if (lua_isnumber(L, 2))
-        if (lua_isstring(L, 3))
-					if (g_fontCurrent >= 0) {
-						SDL_Surface *textsurface = NULL;
-						textsurface = SDL_ConvertSurface(textsurface, g_se_surface->format, 0);
-						const char *message = lua_tostring(L, 3);
-						TTF_Font *font = g_fontList[g_fontCurrent];
-						
-						switch (g_fontQuality) {
-							case 1:
-								textsurface = TTF_RenderText_Solid(font, message, g_colorForeground);
-								break;
-							
-							case 2:
-								textsurface = TTF_RenderText_Shaded(font, message, g_colorForeground, g_colorBackground);
-								break;
-							
-							case 3:
-								textsurface = TTF_RenderText_Blended(font, message, g_colorForeground);
-								break;
-						}
-						
-						if (!(textsurface)) {
-							sep_die("Font surface is null!");
-						} else {
-							SDL_Rect dest;
-							dest.w = textsurface->w;
-							dest.h = textsurface->h;
+  if (n != 3) return 0;
 
-							if (g_fullsize_overlay) {
+  if (lua_type(L, 1) == LUA_TNUMBER && lua_type(L, 2) == LUA_TNUMBER && lua_type(L, 3) == LUA_TSTRING && g_fontCurrent >= 0) {
+    const char *message = lua_tostring(L, 3);
+    TTF_Font *font = g_fontList[g_fontCurrent];
 
-							    dest.x = lua_tonumber(L, 1) + g_sep_overlay_scale_x;
-							    dest.y = lua_tonumber(L, 2) + g_sep_overlay_scale_y;
+    SDL_Surface_Ptr textsurface;
+    if (g_fontQuality == 1) {
+      textsurface.reset(TTF_RenderText_Solid(font, message, g_colorForeground));
+	} else if (g_fontQuality == 2) {
+      textsurface.reset(TTF_RenderText_Shaded(font, message, g_colorForeground, g_colorBackground));
+	} else if (g_fontQuality == 3) {
+      textsurface.reset(TTF_RenderText_Blended(font, message, g_colorForeground));
+    }
 
-							} else {
+    if (!(textsurface)) {
+      sep_die("Font surface is null!");
+    } else {
+      SDL_Rect dest;
+      dest.w = textsurface->w;
+      dest.h = textsurface->h;
 
-							    dest.x = lua_tonumber(L, 1);
-							    dest.y = lua_tonumber(L, 2);
+      if (g_fullsize_overlay) {
+        dest.x = lua_tonumber(L, 1) + g_sep_overlay_scale_x;
+        dest.y = lua_tonumber(L, 2) + g_sep_overlay_scale_y;
+      } else {
+        dest.x = lua_tonumber(L, 1);
+        dest.y = lua_tonumber(L, 2);
 
-							    if (dest.x == 0x05 && dest.y == 0x05 && dest.h == 0x17) // AM SCORE SHUNT
-								dest.x+=20;
+        // AM SCORE SHUNT
+        if (dest.x == 0x05 && dest.y == 0x05 && dest.h == 0x17) dest.x += 20;
 
-							    if (g_se_overlay_width > SINGE_OW) {
-								if (dest.h == 0x16 && dest.y == 0xcf) { // JR SCOREBOARD
-                                                                    dest.x = dest.x - (double)((g_se_overlay_width + dest.x + dest.w) / 22);
-                                                                    if (dest.x <(SINGE_OW>>2)) dest.x-=4;
-                                                                    if (dest.x >(SINGE_OW>>1)) dest.x+=4;
-								}
-								else
-								    dest.x = dest.x - (double)(((g_se_overlay_width) + (dest.x * 32)
-                                                                           + (dest.w * 26)) / SINGE_OW);
-							    }
-							}
+        if (g_se_overlay_width > SINGE_OW) {
+            // JR SCOREBOARD
+            if (dest.h == 0x16 && dest.y == 0xcf) {
+                dest.x = dest.x - (double)((g_se_overlay_width + dest.x + dest.w) / 22);
+                if (dest.x < (SINGE_OW >> 2)) dest.x -= 4;
+                if (dest.x > (SINGE_OW >> 1)) dest.x += 4;
+            } else {
+                dest.x = dest.x - (g_se_overlay_width + dest.x * 32 + dest.w * 26) / SINGE_OW;
+            }
+        }
+      }
 
-							SDL_SetSurfaceRLE(textsurface, SDL_TRUE);
-							SDL_SetColorKey(textsurface, SDL_TRUE, 0x0);
-							if (!video::get_singe_blend_sprite())
-								SDL_SetSurfaceBlendMode(textsurface, SDL_BLENDMODE_NONE);
+	  SDL_Texture_Ptr text_texture(SDL_CreateTextureFromSurface(video::get_renderer(), textsurface.get()));
+      if (!video::get_singe_blend_sprite()) {
+        SDL_SetTextureBlendMode(text_texture.get(), SDL_BLENDMODE_NONE);
+      }
+	  overlay.GetDrawList().Image(std::move(text_texture), dest);
 
-							SDL_BlitSurface(textsurface, NULL, g_se_surface, &dest);
-							SDL_FreeSurface(textsurface);
-						}
-          }
+      // SDL_SetSurfaceRLE(textsurface, SDL_TRUE);
+      // SDL_SetColorKey(textsurface, SDL_TRUE, 0x0);
+      // if (!video::get_singe_blend_sprite())
+      //   SDL_SetSurfaceBlendMode(textsurface, SDL_BLENDMODE_NONE);
+      // SDL_BlitSurface(textsurface, NULL, g_se_surface, &dest);
+      // SDL_FreeSurface(textsurface);
+    }
+  }
 
   return 0;
 }
@@ -1195,18 +1141,16 @@ static int sep_search(lua_State *L)
   char s[7] = { 0 };
   int n = lua_gettop(L);
 
-  if (n == 1)
-    if (lua_isnumber(L, 1))
-    {
-      g_pSingeIn->framenum_to_frame(lua_tonumber(L, 1), s);
-      g_pSingeIn->pre_search(s, true);
+  if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+  {
+    g_pSingeIn->framenum_to_frame(lua_tonumber(L, 1), s);
+    g_pSingeIn->pre_search(s, true);
 
-      if (g_pSingeIn->g_local_info->blank_during_searches)
-          if (debounced)
-              video::set_video_timer_blank(true);
+    if (g_pSingeIn->g_local_info->blank_during_searches)
+      if (debounced) video::set_video_timer_blank(true);
 
-      debounced = true;
-    }
+    debounced = true;
+  }
 
   return 0;
 }
@@ -1215,11 +1159,10 @@ static int sep_search_blanking(lua_State *L)
 {
   int n = lua_gettop(L);
   
-  if (n == 1)
-    if (lua_isboolean(L, 1))
-	{
-          g_pSingeIn->set_search_blanking(lua_toboolean(L, 1));
-	}
+  if (n == 1 && lua_isboolean(L, 1))
+  {
+    g_pSingeIn->set_search_blanking(lua_toboolean(L, 1));
+  }
 
   return 0;
 }
@@ -1233,13 +1176,14 @@ static int sep_set_disc_fps(lua_State *L)
       g_pSingeIn->disable_audio2();
   }
 
-  if (n == 1)
-    if (lua_isnumber(L, 1))
-    {
-      *g_se_disc_fps = lua_tonumber(L, 1);
-	    if (*g_se_disc_fps != 0.0)
-		    *g_se_uDiscFPKS = (unsigned int) ((*g_se_disc_fps * 1000.0) + 0.5);	// frames per kilosecond (same precision, but an int instead of a float)
-    }
+  if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+  {
+    *g_se_disc_fps = lua_tonumber(L, 1);
+    if (*g_se_disc_fps != 0.0) {
+      // frames per kilosecond (same precision, but an int instead of a float)
+      *g_se_uDiscFPKS = (unsigned int)((*g_se_disc_fps * 1000.0) + 0.5);
+	}
+  }
 
   return 0;
 }
@@ -1248,15 +1192,14 @@ static int sep_skip_backward(lua_State *L)
 {
   int n = lua_gettop(L);
 
-  if (n == 1)
-    if (lua_isnumber(L, 1))
-	{
-          if (g_pSingeIn->g_local_info->blank_during_skips)
-              video::set_video_timer_blank(true);
+  if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+  {
+    if (g_pSingeIn->g_local_info->blank_during_skips)
+      video::set_video_timer_blank(true);
 
-          g_pSingeIn->pre_skip_backward(lua_tonumber(L, 1));
-	}
-      
+    g_pSingeIn->pre_skip_backward(lua_tonumber(L, 1));
+  }
+
   return 0;
 }
 
@@ -1264,11 +1207,10 @@ static int sep_skip_blanking(lua_State *L)
 {
   int n = lua_gettop(L);
   
-  if (n == 1)
-    if (lua_isboolean(L, 1))
-	{
-           g_pSingeIn->set_skip_blanking(lua_toboolean(L, 1));
-	}
+  if (n == 1 && lua_isboolean(L, 1))
+  {
+    g_pSingeIn->set_skip_blanking(lua_toboolean(L, 1));
+  }
 
   return 0;
 }
@@ -1277,49 +1219,45 @@ static int sep_skip_forward(lua_State *L)
 {
   int n = lua_gettop(L);
 
-  if (n == 1)
-    if (lua_isnumber(L, 1))
-	{
-          if (g_pSingeIn->g_local_info->blank_during_skips)
-              video::set_video_timer_blank(true);
+  if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+  {
+    if (g_pSingeIn->g_local_info->blank_during_skips)
+      video::set_video_timer_blank(true);
 
-          g_pSingeIn->pre_skip_forward(lua_tonumber(L, 1));
-	}
-      
+    g_pSingeIn->pre_skip_forward(lua_tonumber(L, 1));
+  }
+
   return 0;
 }
 
 static int sep_skip_to_frame(lua_State *L)
 {
-	int n = lua_gettop(L);
-	static bool debounced = false;
+  int n = lua_gettop(L);
+  static bool debounced = false;
 
-	if (g_init_mute && debounced) {
-            g_pSingeIn->enable_audio1();
-            g_pSingeIn->enable_audio2();
-            g_init_mute = false;
-	}
+  if (g_init_mute && debounced) {
+    g_pSingeIn->enable_audio1();
+    g_pSingeIn->enable_audio2();
+    g_init_mute = false;
+  }
 
-	if (n == 1)
-	{
-		if (lua_isnumber(L, 1))
-		{
-			// TODO : implement this for real on the hypseus side of things instead of having to do a search/play hack
-			char s[7] = { 0 };
+  if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+  {
+    // TODO : implement this for real on the hypseus side of things instead of
+    // having to do a search/play hack
+    char s[7] = {0};
 
-			if (g_pSingeIn->g_local_info->blank_during_skips)
-			    if (debounced)
-			        video::set_video_timer_blank(true);
+    if (g_pSingeIn->g_local_info->blank_during_skips)
+      if (debounced) video::set_video_timer_blank(true);
 
-			g_pSingeIn->framenum_to_frame(lua_tonumber(L, 1), s);
-			g_pSingeIn->pre_search(s, true);
-			g_pSingeIn->pre_play();
-			g_pause_state = false; // BY RDG2010
-			debounced = true;
-		}
-	}
+    g_pSingeIn->framenum_to_frame(lua_tonumber(L, 1), s);
+    g_pSingeIn->pre_search(s, true);
+    g_pSingeIn->pre_play();
+    g_pause_state = false; // BY RDG2010
+    debounced = true;
+  }
 
-	return 0;
+  return 0;
 }
 
 static int sep_sound_load(lua_State *L)
@@ -1355,17 +1293,20 @@ static int sep_sound_load(lua_State *L)
 static int sep_sound_play(lua_State *L)
 {
   int n = lua_gettop(L);
-	int result = -1;
+  int result = -1;
 
-  if (n == 1)
-    if (lua_isnumber(L, 1))
-		{
-			int sound = lua_tonumber(L, 1);
-			if (sound < (int)g_soundList.size())
-				result = g_pSingeIn->samples_play_sample(g_soundList[sound].buffer, g_soundList[sound].length, g_soundList[sound].audioSpec.channels, -1, sep_sound_ended);
-		}
-		
-	lua_pushnumber(L, result);
+  if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+  {
+    int sound = lua_tonumber(L, 1);
+    if (sound < (int)g_soundList.size()) {
+      result = g_pSingeIn->samples_play_sample(g_soundList[sound].buffer,
+                                               g_soundList[sound].length,
+                                               g_soundList[sound].audioSpec.channels,
+                                               -1, sep_sound_ended);
+    }
+  }
+
+  lua_pushnumber(L, result);
   return 1;
 }
 
@@ -1373,70 +1314,43 @@ static int sep_sprite_draw(lua_State *L)
 {
   int n = lua_gettop(L);
 
-  if (n == 3)
-    if (lua_isnumber(L, 1))
-			if (lua_isnumber(L, 2))
-				if (lua_isnumber(L, 3))
-				{
-					int sprite = lua_tonumber(L, 3);
-					if (sprite < (int)g_spriteList.size())
-					{
-						SDL_Rect dest;
-						dest.w = g_spriteList[sprite]->w;
-						dest.h = g_spriteList[sprite]->h;
+  if (n == 3 && lua_type(L, 1) == LUA_TNUMBER && lua_type(L, 2) == LUA_TNUMBER && lua_type(L, 3) == LUA_TNUMBER) {
+    int sprite = lua_tonumber(L, 3);
+    if (sprite < g_spriteList.size()) {
+      SDL_Rect dest;
+      SDL_QueryTexture(g_spriteList[sprite].get(), nullptr, nullptr, &dest.w, &dest.h);
 
-						if (g_fullsize_overlay) {
+      if (g_fullsize_overlay) {
+        dest.x = lua_tonumber(L, 1) + g_sep_overlay_scale_x;
+        dest.y = lua_tonumber(L, 2) + g_sep_overlay_scale_y;
+      } else {
+        dest.x = lua_tonumber(L, 1);
+        dest.y = lua_tonumber(L, 2);
 
-						    dest.x = lua_tonumber(L, 1) + g_sep_overlay_scale_x;
-						    dest.y = lua_tonumber(L, 2) + g_sep_overlay_scale_y;
+        if (g_se_overlay_width > SINGE_OW) {
+          if (g_not_cursor && dest.y > 0xbe && dest.y <= 0xde)
+            dest.x = dest.x - (g_se_overlay_width + dest.x + dest.w) / 26;
+          else
+            dest.x = dest.x - (g_se_overlay_width + dest.x * 32 + dest.w * 26) / SINGE_OW;
+        }
+      }
 
-						} else {
+      if (dest.w == 0x89 && dest.h == 0x1c) { // SP
+        // SDL_SetColorKey(g_spriteList[sprite], SDL_TRUE, 0x000000ff);
+        dest.x += 3;
+      }
 
-						    dest.x = lua_tonumber(L, 1);
-						    dest.y = lua_tonumber(L, 2);
+      // if (!video::get_singe_blend_sprite() && dest.w != 0xcc && dest.h != 0x15 &&
+      //     dest.w != 0x0b && dest.h != 0x0b) // JR / AM
+      //   SDL_SetSurfaceBlendMode(g_spriteList[sprite], SDL_BLENDMODE_NONE);
 
-						    if (g_se_overlay_width > SINGE_OW) {
-							if (g_not_cursor && dest.y > 0xbe && dest.y <= 0xde)
-							    dest.x = dest.x - (double)((g_se_overlay_width + dest.x + dest.w) / 26);
-							else
-							    dest.x = dest.x - (double)((g_se_overlay_width + (dest.x * 32)
-									    + (dest.w * 26)) / SINGE_OW);
-						    }
-						}
+      overlay.GetDrawList().Image(g_spriteList[sprite].get(), dest);
+      // SDL_BlitSurface(g_spriteList[sprite], NULL, g_se_surface, &dest);
+    }
+  }
 
-						if (dest.w == 0x89 && dest.h == 0x1c) { // SP
-							SDL_SetColorKey(g_spriteList[sprite], SDL_TRUE, 0x000000ff);
-							dest.x+=3;
-						}
-
-						if ((!video::get_singe_blend_sprite()) &&
-								(dest.w != 0xcc && dest.h != 0x15) && (dest.w != 0x0b && dest.h != 0x0b)) // JR / AM
-							SDL_SetSurfaceBlendMode(g_spriteList[sprite], SDL_BLENDMODE_NONE);
-
-						SDL_BlitSurface(g_spriteList[sprite], NULL, g_se_surface, &dest);
-					}
-				}
-	g_not_cursor = true;
-	return 0;
-}
-
-static int sep_sprite_height(lua_State *L)
-{
-  int n = lua_gettop(L);
-	int result = -1;
-
-  if (n == 1)
-    if (lua_isnumber(L, 1))
-		{
-			int sprite = lua_tonumber(L, 1);
-			if ((sprite < (int)g_spriteList.size()) && (sprite >= 0))
-			{
-				result = g_spriteList[sprite]->h;
-			}
-		}
-	
-	lua_pushnumber(L, result);
-  return 1;
+  g_not_cursor = true;
+  return 0;
 }
 
 static int sep_sprite_load(lua_State *L)
@@ -1456,14 +1370,12 @@ static int sep_sprite_load(lua_State *L)
             filepath = tmpPath;
         }
 
-        SDL_Surface *temp = IMG_Load(filepath.c_str());
-
+        SDL_Texture_Ptr temp(IMG_LoadTexture(video::get_renderer(), filepath.c_str()));
         if (temp) {
-            // free old surface?
-            temp = SDL_ConvertSurface(temp, g_se_surface->format, 0);
-            SDL_SetSurfaceRLE(temp, SDL_TRUE);
-            SDL_SetColorKey(temp, SDL_TRUE, 0x0);
-            g_spriteList.push_back(temp);
+            // temp = SDL_ConvertSurface(temp, g_se_surface->format, 0);
+            // SDL_SetSurfaceRLE(temp, SDL_TRUE);
+            // SDL_SetColorKey(temp, SDL_TRUE, 0x0);
+            g_spriteList.push_back(std::move(temp));
             result = g_spriteList.size() - 1;
         } else {
             sep_die("Unable to load sprite %s!", filepath.c_str());
@@ -1477,19 +1389,34 @@ static int sep_sprite_load(lua_State *L)
 static int sep_sprite_width(lua_State *L)
 {
   int n = lua_gettop(L);
-	int result = -1;
-	
-  if (n == 1)
-    if (lua_isnumber(L, 1))
-		{
-			int sprite = lua_tonumber(L, 1);
-			if ((sprite < (int)g_spriteList.size()) && (sprite >= 0))
-			{
-				result = g_spriteList[sprite]->w;
-			}
-		}
+  int result = -1;
 
-	lua_pushnumber(L, result);
+  if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+  {
+    int sprite = lua_tonumber(L, 1);
+    if (sprite < g_spriteList.size() && sprite >= 0) {
+      SDL_QueryTexture(g_spriteList[sprite].get(), nullptr, nullptr, &result, nullptr);
+    }
+  }
+
+  lua_pushnumber(L, result);
+  return 1;
+}
+
+static int sep_sprite_height(lua_State *L)
+{
+  int n = lua_gettop(L);
+  int result = -1;
+
+  if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+  {
+    int sprite = lua_tonumber(L, 1);
+    if (sprite < g_spriteList.size() && sprite >= 0) {
+      SDL_QueryTexture(g_spriteList[sprite].get(), nullptr, nullptr, nullptr, &result);
+    }
+  }
+
+  lua_pushnumber(L, result);
   return 1;
 }
 
@@ -1520,54 +1447,48 @@ static int sep_get_number_of_mice(lua_State *L)
 // by RDG2010
 static int sep_keyboard_set_mode(lua_State *L)
 {
+    /*
+     * Singe can scan keyboard input in two ways:
+     *
+     * MODE_NORMAL - Singe will only check for keys defined
+     * in hypinput.ini. This is the default behavior.
+     *
+     * MODE_FULL   - Singe will scan the keyboard for most keypresses.
+     *
+     * This function allows the mode to be set through a lua scrip command.
+     * Take a look at singe::set_keyboard_mode on singe.cpp for more info.
+     *
+     */
 
-	/*
-	* Singe can scan keyboard input in two ways:
-	*
-	* MODE_NORMAL - Singe will only check for keys defined
-	* in hypinput.ini. This is the default behavior.
-	* 
-	* MODE_FULL   - Singe will scan the keyboard for most keypresses.
-	* 
-	* This function allows the mode to be set through a lua scrip command.
-	* Take a look at singe::set_keyboard_mode on singe.cpp for more info.
-	*
-	*/
-
-	int n = lua_gettop(L);
-	int q = 0;
+    int n = lua_gettop(L);
 		
-	if (n == 1)
-	{		
-		if (lua_isnumber(L, 1))
-		{	
-			q = lua_tonumber(L, 1);
-			g_pSingeIn->cfm_set_keyboard_mode(g_pSingeIn->pSingeInstance, q);
-			
-		}
-	}
-	return 0;
+	if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+    {
+      int q = lua_tonumber(L, 1);
+      g_pSingeIn->cfm_set_keyboard_mode(g_pSingeIn->pSingeInstance, q);
+    }
+
+    return 0;
 }
 
 // by RDG2010
 static int sep_keyboard_get_mode(lua_State *L)
 {
-	/*
-	* Singe can scan keyboard input in two ways:
-	*
-	* MODE_NORMAL - Singe will only check for keys defined
-	* in hypinput.ini. This is the default behavior.
-	* 
-	* MODE_FULL   - Singe will scan the keyboard for most keypresses.
-	* 
-	* This function returns the current scan mode for
-	* programming code on the lua script.
-	*
-	* Take a look at singe::get_keyboard_mode on singe.cpp for more info.
-	*
-	*/
-
-	lua_pushnumber(L, g_pSingeIn->cfm_get_keyboard_mode(g_pSingeIn->pSingeInstance));	
+    /*
+     * Singe can scan keyboard input in two ways:
+     *
+     * MODE_NORMAL - Singe will only check for keys defined
+     * in hypinput.ini. This is the default behavior.
+     *
+     * MODE_FULL   - Singe will scan the keyboard for most keypresses.
+     *
+     * This function returns the current scan mode for
+     * programming code on the lua script.
+     *
+     * Take a look at singe::get_keyboard_mode on singe.cpp for more info.
+     *
+     */
+    lua_pushnumber(L, g_pSingeIn->cfm_get_keyboard_mode(g_pSingeIn->pSingeInstance));	
 	return 1;
 }
 
@@ -1587,6 +1508,7 @@ static int sep_singe_quit(lua_State *L)
 	sep_die("User decided to quit early.");
 	return 0;
 }
+
 // by RDG2010
 static int sep_get_vldp_state(lua_State *L)
 {
@@ -1606,7 +1528,6 @@ static int sep_get_vldp_state(lua_State *L)
 
 	lua_pushnumber(L, g_pSingeIn->get_status());	
 	return 1;
-
 }
 
 // by RDG2010
@@ -1626,59 +1547,45 @@ static int sep_get_pause_flag(lua_State *L)
 	*/
 	lua_pushboolean(L, g_pause_state);
 	return 1;
-
 }
 
 static int sep_set_pause_flag(lua_State *L)
 {
 	int n = lua_gettop(L);
-	bool b1 = false;
 		
-	if (n == 1)
-	{		
-		if (lua_isboolean(L, 1))
-		{	
-			b1 = lua_toboolean(L, 1);
-			g_pause_state = b1;
-			
-		}
-	}	
-	return 0;
+	if (n == 1 && lua_isboolean(L, 1))
+    {
+      g_pause_state = lua_toboolean(L, 1);
+    }
+
+    return 0;
 }
 
 static int sep_singe_version(lua_State *L)
 {
-   /*
-	* Returns Singe engine version to the lua script.
-	* For validation purposes.
-	*
-	*/
-	
-	lua_pushnumber(L, g_pSingeIn->get_singe_version());
-	return 1;
-	
+    /*
+     * Returns Singe engine version to the lua script.
+     * For validation purposes.
+     *
+     */
+    lua_pushnumber(L, g_pSingeIn->get_singe_version());
+    return 1;
 }
+
 static int sep_ldp_verbose(lua_State *L)
 {
-	/*
-	 * Enables/Disables writing of VLDP playback activity to hypseus.log
-	 * Enabled by default.
-	 */
+    /*
+     * Enables/Disables writing of VLDP playback activity to hypseus.log
+     * Enabled by default.
+     */
+    int n   = lua_gettop(L);
 
-	int n = lua_gettop(L);
-	bool b1 = false;
-		
-	if (n == 1)
-	{		
-		if (lua_isboolean(L, 1))
-		{	
-			b1 = lua_toboolean(L, 1);
-			g_pSingeIn->set_ldp_verbose(b1);
-			
-		}
-	}	
-	
-	return 0;
+    if (n == 1 && lua_isboolean(L, 1))
+    {
+      g_pSingeIn->set_ldp_verbose(lua_toboolean(L, 1));
+    }
+
+    return 0;
 }
 
 static int sep_sound_pause(lua_State *L)
@@ -1686,15 +1593,14 @@ static int sep_sound_pause(lua_State *L)
 	int n = lua_gettop(L);
 	int result = -1;
 
-	if (n == 1)
-		if (lua_isnumber(L, 1))
-		{
-			int sound = lua_tonumber(L, 1);
-			result = g_pSingeIn->samples_set_state(sound, false);
-		}
+	if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+    {
+      int sound = lua_tonumber(L, 1);
+      result = g_pSingeIn->samples_set_state(sound, false);
+    }
 
-	lua_pushboolean(L, result);
-	return 1;
+    lua_pushboolean(L, result);
+    return 1;
 }
 
 static int sep_sound_resume(lua_State *L)
@@ -1702,14 +1608,13 @@ static int sep_sound_resume(lua_State *L)
 	int n = lua_gettop(L);
 	int result = -1;
 
-	if (n == 1)
-		if (lua_isnumber(L, 1))
-		{
-			int sound = lua_tonumber(L, 1);
-			result = g_pSingeIn->samples_set_state(sound, true);
-		}
+	if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+    {
+      int sound = lua_tonumber(L, 1);
+      result = g_pSingeIn->samples_set_state(sound, true);
+    }
 
-	lua_pushboolean(L, result);
+    lua_pushboolean(L, result);
 	return 1;
 }
 
@@ -1718,15 +1623,14 @@ static int sep_sound_stop(lua_State *L)
 	int n = lua_gettop(L);
 	int result = -1;
 
-	if (n == 1)
-		if (lua_isnumber(L, 1))
-		{
-			int sound = lua_tonumber(L, 1);
-			result = g_pSingeIn->samples_end_early(sound);
-		}
+	if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+    {
+      int sound = lua_tonumber(L, 1);
+      result = g_pSingeIn->samples_end_early(sound);
+    }
 
-	lua_pushboolean(L, result);
-	return 1;
+    lua_pushboolean(L, result);
+    return 1;
 }
 
 static int sep_sound_flush_queue(lua_State *L)
@@ -1740,14 +1644,12 @@ static int sep_sound_get_flag(lua_State *L)
 	int n = lua_gettop(L);
 	bool result = false;
 
-	if (n == 1)
-		if (lua_isnumber(L, 1))
-		{
-			int sound = lua_tonumber(L, 1);
-			result = g_pSingeIn->samples_is_playing(sound);
-		}
+	if (n == 1 && lua_type(L, 1) == LUA_TNUMBER)
+    {
+      int sound = lua_tonumber(L, 1);
+      result = g_pSingeIn->samples_is_playing(sound);
+    }
 
-	lua_pushboolean(L, result);
-	return 1;
+    lua_pushboolean(L, result);
+    return 1;
 }
-

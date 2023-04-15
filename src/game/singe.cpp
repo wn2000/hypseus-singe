@@ -86,6 +86,8 @@ singe::singe()
     // by RDG2010
     m_game_type     = GAME_SINGE;
     i_keyboard_mode = KEYBD_NORMAL;
+
+    m_use_virtual_overlay = true;
 }
 
 bool singe::init()
@@ -530,7 +532,6 @@ void singe::palette_calculate()
 // redraws video
 void singe::repaint()
 {
-
     Uint32 cur_w;
     Uint32 cur_h;
 
@@ -574,7 +575,7 @@ void singe::repaint()
         }
     } // end if dimensions are incorrect
 
-    g_pSingeOut->sep_do_blit(m_video_overlay[m_active_video_overlay]);
+    g_pSingeOut->sep_do_blit(&m_virtual_video_overlay);
 }
 
 void singe::set_last_error(const char *cpszErrMsg)

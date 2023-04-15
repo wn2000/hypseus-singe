@@ -347,7 +347,8 @@ void game::OnLDV1000LineChange(bool bIsStatus, bool bIsEnabled)
 bool game::init_video()
 {
     // Set up SDL display (create window, renderer, surfaces, textures...)
-    video::init_display();
+    // video::init_display();
+
     // set instance variables and local variables to the actual screen (or
     // window) dimension
     int w = video::get_screen_blitter()->w;
@@ -503,8 +504,12 @@ void game::blit()
 
         // MAC: No software scaling to be done on SDL2, so we just update the texture here,
         // and SDL_RenderCopy() will hw-scale for us.
-        video::vid_update_overlay_surface(m_video_overlay[m_active_video_overlay], 0, 0);
-        m_finished_video_overlay = m_active_video_overlay;
+        if (m_use_virtual_overlay) {
+            video::set_virtual_screen_overlay(&m_virtual_video_overlay);
+        } else {
+            video::vid_update_overlay_surface(m_video_overlay[m_active_video_overlay], 0, 0);
+            m_finished_video_overlay = m_active_video_overlay;
+        }
     }
     video::vid_blit();
 }

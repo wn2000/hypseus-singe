@@ -199,6 +199,11 @@ int main(int argc, char **argv)
     // knowing if we want loging or not.
     if (!log_was_disabled) reset_logfile(argc, argv);
 
+    if (!video::init_display()) {
+        printerror("Display initialization failed!");
+        goto cleanup;
+    }
+
     // check if the display initialized properly
     if (!video::load_bmps()) {
         printerror("Video initialization failed!");

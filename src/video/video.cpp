@@ -33,14 +33,12 @@
 #include "../io/mpo_fileio.h"
 #include "../io/mpo_mem.h"
 #include "../ldp-out/ldp.h"
+#include "overlay.h"
 #include "palette.h"
 #include "video.h"
 #include <SDL_syswm.h> // rdg2010
 #include <SDL_image.h> // screenshot
 #include <plog/Log.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
 #include <string> // for some error messages
 
 using namespace std;
@@ -54,6 +52,13 @@ void ConvertSurface(SDL_Surface **surface, const SDL_PixelFormat *fmt)
     SDL_FreeSurface(*surface);
     *surface = tmpSurface;
 }
+
+Overlay sb_overlay;
+Overlay aux_overlay;
+Overlay leds_overlay;
+Overlay *screen_overlay = nullptr;
+// Whether the overlay texture was ever updated from a real (pixel buffer based) overlay
+bool use_overlay_texture = false;
 
 }
 
@@ -79,20 +84,27 @@ unsigned int g_overlay_width = 0, g_overlay_height = 0;
 FC_Font *g_font                    = NULL;
 FC_Font *g_fixfont                 = NULL;
 TTF_Font *g_ttfont                 = NULL;
-SDL_Surface *g_led_bmps[LED_RANGE] = {0};
-SDL_Surface *g_other_bmps[B_EMPTY] = {0};
+FC_Font *g_ttfont_fc               = NULL;
+SDL_Texture *g_led_bmps[LED_RANGE] = {0};
+SDL_Texture *g_other_bmps[B_EMPTY] = {0};
 SDL_Window *g_window               = NULL;
 SDL_Window *g_sb_window            = NULL;
 SDL_Renderer *g_renderer           = NULL;
 SDL_Renderer *g_sb_renderer        = NULL;
+
+// TODO: remove
 SDL_Texture *g_overlay_texture     = NULL; // The OVERLAY texture, excluding LEDs wich are a special case
+
 SDL_Texture *g_yuv_texture         = NULL; // The YUV video texture, registered from ldp-vldp.cpp
+
+// TODO: remove
 SDL_Surface *g_screen_blitter      = NULL; // The main blitter surface
 SDL_Surface *g_leds_surface        = NULL;
 SDL_Surface *g_sb_surface          = NULL;
 SDL_Texture *g_sb_texture          = NULL;
 SDL_Surface *g_sb_blit_surface     = NULL;
 SDL_Surface *g_aux_blit_surface    = NULL;
+
 SDL_Texture *g_bezel_texture       = NULL;
 SDL_Texture *g_aux_texture         = NULL;
 
@@ -338,6 +350,8 @@ bool init_display()
             g_sb_blit_surface = SDL_CreateRGBSurface(SDL_SWSURFACE, g_sb_w, g_sb_h, surfacebpp,
                                                      Rmask, Gmask, Bmask, Amask);
 
+        sb_overlay.SetSize(g_sb_w, g_sb_h);
+
         int displays = SDL_GetNumVideoDisplays();
         SDL_Rect displayDimensions[displays];
 
@@ -425,6 +439,8 @@ bool init_display()
                 SDL_CreateRGBSurface(SDL_SWSURFACE, g_an_w, g_an_h, surfacebpp,
                                      Rmask, Gmask, Bmask, Amask);
 
+            aux_overlay.SetSize(g_an_w, g_an_h);
+
             if (!g_aux_blit_surface) {
                 LOGE << "Failed to load annunicator surface";
                 set_quitflag();
@@ -468,6 +484,7 @@ bool init_display()
                 FC_MakeColor(0xff, 0xff, 0xff, 0xff), TTF_STYLE_NORMAL);
 
     const char *ttfont = nullptr;
+    TTF_CloseFont(g_ttfont);
     if (g_game->get_use_old_overlay()) {
         ttfont = "fonts/daphne.ttf";
         g_ttfont = TTF_OpenFont(ttfont, 12);
@@ -483,6 +500,10 @@ bool init_display()
         return false;
     }
 
+    FC_FreeFont(g_ttfont_fc);
+    g_ttfont_fc = FC_CreateFont();
+    FC_LoadFontFromTTF(g_ttfont_fc, g_renderer, g_ttfont, FC_MakeColor(0xe1, 0xe1, 0xe1, 0xff));
+
     g_screen_blitter = SDL_CreateRGBSurface(SDL_SWSURFACE, g_overlay_width, g_overlay_height,
                                             surfacebpp, Rmask, Gmask, Bmask, Amask);
 
@@ -493,17 +514,23 @@ bool init_display()
     g_leds_surface = SDL_CreateRGBSurface(SDL_SWSURFACE, 320, 240, surfacebpp,
                                           Rmask, Gmask, Bmask, Amask);
 
+    leds_overlay.SetSize(320, 240);
+
     // Convert the LEDs surface to the destination surface format for
     // faster blitting, and set it's color key to NOT copy 0x000000ff
     // pixels. We couldn't do it earlier in load_bmps() because we need
     // the g_screen_blitter format.
+#if 0
     ConvertSurface(&g_other_bmps[B_OVERLAY_LEDS], g_screen_blitter->format);
     SDL_SetColorKey(g_other_bmps[B_OVERLAY_LEDS], SDL_TRUE, 0x000000ff);
+#endif
 
+#if 0
     if (g_game->get_use_old_overlay()) {
         ConvertSurface(&g_other_bmps[B_OVERLAY_LDP1450], g_screen_blitter->format);
         SDL_SetColorKey(g_other_bmps[B_OVERLAY_LDP1450], SDL_TRUE, 0x000000ff);
     }
+#endif
 
     // MAC: If the game uses an overlay, create a texture for it.
     // The g_screen_blitter surface is used from game.cpp anyway, so we
@@ -563,6 +590,8 @@ bool deinit_display()
 
     FC_FreeFont(g_font);
     FC_FreeFont(g_fixfont);
+    TTF_CloseFont(g_ttfont);
+    FC_FreeFont(g_ttfont_fc);
 
     if (g_bezel_texture)
         SDL_DestroyTexture(g_bezel_texture);
@@ -625,19 +654,14 @@ void display_repaint()
 // returns true if they were all successfully loaded, or a false if they weren't
 bool load_bmps()
 {
-
-    bool result = true; // assume success unless we hear otherwise
-    int index   = 0;
-    char filename[81];
-
-    for (; index < LED_RANGE; index++) {
-        snprintf(filename, sizeof(filename), "pics/led%d.bmp", index);
-
-        g_led_bmps[index] = load_one_bmp(filename);
+    for (int i = 0; i < LED_RANGE; i++) {
+        std::string filename = fmt("pics/led%d.bmp", i);
+        g_led_bmps[i] = load_one_bmp(filename.c_str());
 
         // If the bit map did not successfully load
-        if (g_led_bmps[index] == 0) {
-            result = false;
+        if (!g_led_bmps[i]) {
+            LOGE << "Error loading " << filename;
+            return false;
         }
     }
 
@@ -649,10 +673,10 @@ bool load_bmps()
     g_other_bmps[B_GAMENOWOOK]     = load_one_bmp("pics/gamenowook.bmp");
 
     if (sboverlay_characterset != 2)
-	g_other_bmps[B_OVERLAY_LEDS] = load_one_bmp("pics/overlayleds1.bmp");
+        g_other_bmps[B_OVERLAY_LEDS] = load_one_bmp("pics/overlayleds1.bmp");
     else
-	g_other_bmps[B_OVERLAY_LEDS] = load_one_bmp("pics/overlayleds2.bmp");
-   
+        g_other_bmps[B_OVERLAY_LEDS] = load_one_bmp("pics/overlayleds2.bmp");
+
     g_other_bmps[B_OVERLAY_LDP1450] = load_one_bmp("pics/ldp1450font.bmp");
 
     g_other_bmps[B_ACE_CADET]   = load_one_bmp("pics/cadet.bmp");
@@ -663,51 +687,52 @@ bool load_bmps()
     g_other_bmps[B_ANUN_OFF]    = load_one_png("annunoff.png");
 
     // check to make sure they all loaded
-    for (index = 0; index < B_EMPTY; index++) {
-        if (g_other_bmps[index] == NULL) {
-            result = false;
+    for (int i = 0; i < B_EMPTY; i++) {
+        if (!g_other_bmps[i]) {
+            return false;
         }
     }
 
-    return (result);
+    return true;
 }
 
-SDL_Surface *load_one_bmp(const char *filename)
+SDL_Texture *load_one_bmp(const char* filename)
 {
-    SDL_Surface *result  = SDL_LoadBMP(filename);
-
+    SDL_Texture* result = IMG_LoadTexture(get_renderer(), filename);
     if (!result) {
         LOGE << fmt("Could not load bitmap: %s", filename);
     }
- 
-    return (result);
+
+    return result;
 }
 
-SDL_Surface *load_one_png(const char *filename)
+SDL_Texture *load_one_png(const char *filename)
 {
-    char filepath[64] = {};
+    std::string filepath = fmt("bezels/%s", filename);
+    if (!mpo_file_exists(filepath.c_str()))
+        filepath = fmt("pics/%s", filename);
 
-    snprintf(filepath, sizeof(filepath), "bezels/%s", filename);
-
-    if (!mpo_file_exists(filepath))
-        snprintf(filepath, sizeof(filepath), "pics/%s", filename);
-
-    SDL_Surface *result = IMG_Load(filepath);
-
+    SDL_Texture* result = IMG_LoadTexture(get_renderer(), filepath.c_str());
     if (!result) {
         LOGE << fmt("Could not load png: %s", filepath);
     }
 
-    return (result);
+    return result;
 }
 
-// Draw's one of our LED's to the screen
+// Draws one of our LED's to the screen
 // value contains the bitmap to draw (0-9 is valid)
 // x and y contain the coordinates on the screen
 // This function is called from img-scoreboard.cpp
 // 1 is returned on success, 0 on failure
 bool draw_led(int value, int x, int y)
 {
+    int w, h;
+    SDL_QueryTexture(g_led_bmps[value], nullptr, nullptr, &w, &h);
+    sb_overlay.GetDrawList().Image(g_led_bmps[value], x, y, w, h);
+    return true;
+
+#if 0
     g_sb_surface = g_led_bmps[value];
     static char led = 0;
 
@@ -733,10 +758,37 @@ bool draw_led(int value, int x, int y)
     }
     led++;
     return true;
+#endif
 }
 
 bool draw_annunciator(int which)
 {
+    int w, h;
+    SDL_QueryTexture(g_other_bmps[B_ANUN_OFF], nullptr, nullptr, &w, &h);
+
+    constexpr uint8_t spacer = 4;
+
+    SDL_Rect dest;
+    dest.x = g_an_w - (w + (w >> 2));
+    dest.w = w;
+    dest.h = h;
+
+    aux_overlay.GetDrawList().Clear();
+
+    for (int i = 0; i < ANUN_LEVELS; i++) {
+       dest.y = ((dest.h + ANUN_CHAR_HEIGHT) * i) + spacer;
+       aux_overlay.GetDrawList().Image(g_other_bmps[B_ANUN_OFF], dest);
+    }
+
+    if (which) {
+        dest.y = (dest.h + ANUN_CHAR_HEIGHT) * (which - 1) + spacer;
+        aux_overlay.GetDrawList().Image(g_other_bmps[B_ANUN_ON], dest);
+    }
+
+    g_aux_needs_update = true;
+    return true;
+
+#if 0
     g_sb_surface = g_other_bmps[B_ANUN_OFF];
 
     SDL_Rect dest;
@@ -762,6 +814,7 @@ bool draw_annunciator(int which)
 
     g_aux_needs_update = true;
     return true;
+#endif
 }
 
 bool draw_ranks()
@@ -771,16 +824,30 @@ bool draw_ranks()
     dest.y = dest.x - 1;
 
     for (int i = B_ACE_SPACE; i < B_EMPTY; i++) {
+        SDL_QueryTexture(g_other_bmps[i], nullptr, nullptr, &dest.w, &dest.h);
+        aux_overlay.GetDrawList().Image(g_other_bmps[i], dest);
+        dest.y += (ANUN_CHAR_HEIGHT << 1) + (ANUN_CHAR_HEIGHT);
+    }
+
+    return true;
+
+#if 0
+    SDL_Rect dest;
+    dest.x = 10;
+    dest.y = dest.x - 1;
+
+    for (int i = B_ACE_SPACE; i < B_EMPTY; i++) {
 
         g_sb_surface = g_other_bmps[i];
 
-        dest.w = (unsigned short) g_sb_surface->w;
-        dest.h = (unsigned short) g_sb_surface->h;
+        dest.w = (unsigned short)g_sb_surface->w;
+        dest.h = (unsigned short)g_sb_surface->h;
         SDL_BlitSurface(g_sb_surface, NULL, g_aux_blit_surface, &dest);
         dest.y = dest.y + (ANUN_CHAR_HEIGHT << 1) + (ANUN_CHAR_HEIGHT);
     }
 
     return true;
+#endif
 }
 
 
@@ -788,6 +855,30 @@ bool draw_ranks()
 void draw_overlay_leds(unsigned int values[], int num_digits,
                        int start_x, int y)
 {
+    SDL_Rect src, dest;
+
+    dest.x = start_x;
+    dest.y = y;
+    dest.w = OVERLAY_LED_WIDTH;
+    dest.h = OVERLAY_LED_HEIGHT;
+
+    src.y = 0;
+    src.w = OVERLAY_LED_WIDTH;
+    src.h = OVERLAY_LED_HEIGHT;
+
+    if (!g_scoreboard_needs_update) {
+        leds_overlay.GetDrawList().Clear();
+        g_scoreboard_needs_update = true;
+    }
+
+    for (int i = 0; i < num_digits; i++) {
+        src.x = values[i] * OVERLAY_LED_WIDTH;
+
+        leds_overlay.GetDrawList().Image(g_other_bmps[B_OVERLAY_LEDS], src, dest);
+        dest.x += OVERLAY_LED_WIDTH;
+    }
+
+#if 0
     SDL_Rect src, dest;
 
     dest.x = start_x;
@@ -820,6 +911,7 @@ void draw_overlay_leds(unsigned int values[], int num_digits,
     // MAC: Even if we updated the overlay surface here, there's no need to do not-thread-safe stuff
     // like SDL_UpdateTexture(), SDL_RenderCopy(), etc... until we are going to compose a final frame
     // with the YUV texture and the overlay on top (which is issued from vldp for now) in VIDEO_RUN_BLIT.
+#endif
 }
 
 // Draw LDP1450 overlay characters to the screen - rewrite for SDL2 (DBX)
@@ -879,7 +971,6 @@ void draw_singleline_LDP1450(char *LDP1450_String, int start_x, int y)
 
     int i = 0;
     int LDP1450_strlen;
-    g_scoreboard_needs_update = true;
 
     if (g_aspect_ratio == ASPECTSD &&
              g_draw_width == NOSQUARE)
@@ -898,7 +989,7 @@ void draw_singleline_LDP1450(char *LDP1450_String, int start_x, int y)
 
     if (!LDP1450_strlen)
     {
-        strcpy(LDP1450_String,"           ");
+        strcpy(LDP1450_String, "           ");
         LDP1450_strlen = strlen(LDP1450_String);
     }
     else
@@ -912,8 +1003,12 @@ void draw_singleline_LDP1450(char *LDP1450_String, int start_x, int y)
         }
     }
 
-    for (i=0; i<LDP1450_strlen; i++)
-    {
+    if (!g_scoreboard_needs_update) {
+        leds_overlay.GetDrawList().Clear();
+        g_scoreboard_needs_update = true;
+    }
+
+    for (i = 0; i < LDP1450_strlen; i++) {
         char value = LDP1450_String[i];
 
         if (value >= 0x26 && value <= 0x39) value -= 0x25;
@@ -922,8 +1017,13 @@ void draw_singleline_LDP1450(char *LDP1450_String, int start_x, int y)
         else value = 0x31;
 
         src.x = value * OVERLAY_LDP1450_WIDTH;
+
+        leds_overlay.GetDrawList().Image(g_other_bmps[B_OVERLAY_LDP1450], src, dest);
+
+#if 0
         SDL_FillRect(g_leds_surface, &dest, 0x00000000);
         SDL_BlitSurface(g_other_bmps[B_OVERLAY_LDP1450], &src, g_leds_surface, &dest);
+#endif
         dest.x += OVERLAY_LDP1450_CHARACTER_SPACING;
     }
 }
@@ -932,6 +1032,15 @@ void draw_singleline_LDP1450(char *LDP1450_String, int start_x, int y)
 //  'which' corresponds to enumerated values
 bool draw_othergfx(int which, int x, int y)
 {
+    SDL_Rect dest;
+    dest.x = x;
+    dest.y = y;
+
+    SDL_QueryTexture(g_other_bmps[which], nullptr, nullptr, &dest.w, &dest.h);
+    sb_overlay.GetDrawList().Image(g_other_bmps[which], dest);
+    return true;
+
+#if 0
     g_sb_surface = g_other_bmps[which];
 
     if (g_sb_renderer && which == B_DL_PLAYER1)
@@ -946,6 +1055,7 @@ bool draw_othergfx(int which, int x, int y)
     SDL_BlitSurface(g_sb_surface, NULL, g_sb_blit_surface, &dest);
 
     return true;
+#endif
 }
 
 // de-allocates all of the .bmps that we have allocated
@@ -963,8 +1073,8 @@ void free_bmps()
     }
 }
 
-void free_one_bmp(SDL_Surface *candidate) { 
-	SDL_FreeSurface(candidate); 
+void free_one_bmp(SDL_Texture *candidate) { 
+    SDL_DestroyTexture(candidate);
 }
 
 //////////////////////////////////////////////////////////////////////////////////////////
@@ -977,6 +1087,7 @@ SDL_Texture *get_yuv_screen() { return g_yuv_texture; }
 SDL_Surface *get_screen_leds() { return g_leds_surface; }
 
 FC_Font *get_font() { return g_font; }
+FC_Font *get_tt_font() { return g_ttfont_fc; }
 
 Uint16 get_video_width() { return g_vid_width; }
 Uint16 get_video_height() { return g_vid_height; }
@@ -1099,24 +1210,30 @@ void set_video_height(Uint16 height)
     g_vid_resized = true;
 }
 
+void set_virtual_screen_overlay(::Overlay *ovly)
+{
+    screen_overlay = ovly;
+}
+
 void draw_string(const char *t, int col, int row, SDL_Surface *surface)
 {
     SDL_Rect dest;
-    dest.y = (short)(row);
-    dest.w = (unsigned short)(6 * strlen(t));
+    dest.y = row;
+    dest.w = 6 * strlen(t);
     dest.h = 14;
-
-    SDL_Surface *text_surface;
-
-    if (g_game->get_use_old_overlay()) dest.x = (short)((col * 6));
-    else dest.x = (short)((col * 5));
+    dest.x = g_game->get_use_old_overlay() ? col * 6 : col * 5;
 
     SDL_FillRect(surface, &dest, 0x00000000);
-    SDL_Color color={0xe1, 0xe1, 0xe1};
-    text_surface=TTF_RenderText_Solid(g_ttfont, t, color);
+    SDL_Surface_Ptr text_surface(TTF_RenderText_Solid(g_ttfont, t, {0xe1, 0xe1, 0xe1}));
+    SDL_BlitSurface(text_surface.get(), NULL, surface, &dest);
+}
 
-    SDL_BlitSurface(text_surface, NULL, surface, &dest);
-    SDL_FreeSurface(text_surface);
+void draw_string(const char *t, int col, int row, Overlay *overlay)
+{
+    int y = row;
+    int x = g_game->get_use_old_overlay() ? col * 6 : col * 5;
+
+    overlay->GetDrawList().Text(t, x, y);
 }
 
 void draw_subtitle(char *s, bool insert)
@@ -1385,16 +1502,20 @@ void vid_blit () {
 
     // Does OVERLAY texture need update from the scoreboard surface?
     if (g_scoreboard_needs_update) {
+#if 0
         SDL_UpdateTexture(g_overlay_texture, &g_leds_size_rect,
 	    (void *)g_leds_surface->pixels, g_leds_surface->pitch);
+#endif
     }
 
     // Does OVERLAY texture need update from the overlay surface?
     if (g_overlay_needs_update) {
+#if 0
         SDL_UpdateTexture(g_overlay_texture, &g_overlay_size_rect,
 	    (void *)g_screen_blitter->pixels, g_screen_blitter->pitch);
 
         g_overlay_needs_update = false;
+#endif
     }
 
     // Sadly, we have to RenderCopy the YUV texture on every blitting strike, because
@@ -1408,19 +1529,50 @@ void vid_blit () {
 
     // If there's an overlay texture, it means we are using some kind of overlay,
     // be it LEDs or any other thing, so RenderCopy it to the renderer ON TOP of the YUV video.
-    if (g_overlay_texture) {
-        if (!g_scale_view)
-            SDL_RenderCopy(g_renderer, g_overlay_texture, &g_render_size_rect, NULL);
-        else
-            SDL_RenderCopy(g_renderer, g_overlay_texture, &g_render_size_rect, &g_scaling_rect);
+    // if (g_overlay_texture) {
+    //     if (!g_scale_view)
+    //         SDL_RenderCopy(g_renderer, g_overlay_texture, &g_render_size_rect, NULL);
+    //     else
+    //         SDL_RenderCopy(g_renderer, g_overlay_texture, &g_render_size_rect, &g_scaling_rect);
+    // }
+
+    if (screen_overlay) {
+        LOGI << fmt("screen overlay: %dx%d", screen_overlay->Width(), screen_overlay->Height());
+
+        screen_overlay->Render();
+
+        // TODO: better palce to clear?
+        screen_overlay->GetDrawList().Clear();
+        screen_overlay = nullptr;
+    } else {
+        if (g_overlay_needs_update) {
+            SDL_UpdateTexture(g_overlay_texture, &g_overlay_size_rect,
+                              (void *)g_screen_blitter->pixels, g_screen_blitter->pitch);
+
+            use_overlay_texture = true;
+            g_overlay_needs_update = false;
+        }
+
+        if (use_overlay_texture) {
+            if (!g_scale_view)
+                SDL_RenderCopy(g_renderer, g_overlay_texture, &g_render_size_rect, NULL);
+            else
+                SDL_RenderCopy(g_renderer, g_overlay_texture,
+                               &g_render_size_rect, &g_scaling_rect);
+        }
     }
 
-    if (g_aux_needs_update) {
-        SDL_UpdateTexture(g_aux_texture, &g_annu_rect,
-            (void *)g_aux_blit_surface->pixels, g_aux_blit_surface->pitch);
-
-        g_aux_needs_update = false;
+    leds_overlay.Render();
+    if (g_scoreboard_needs_update) {
+        g_scoreboard_needs_update = false;
     }
+
+    // if (g_aux_needs_update) {
+    //     SDL_UpdateTexture(g_aux_texture, &g_annu_rect,
+    //         (void *)g_aux_blit_surface->pixels, g_aux_blit_surface->pitch);
+
+    //     g_aux_needs_update = false;
+    // }
 
     // If there's a subtitle overlay
     if (g_bSubtitleShown) draw_subtitle(subchar, false);

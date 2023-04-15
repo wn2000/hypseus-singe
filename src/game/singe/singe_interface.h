@@ -1,6 +1,8 @@
 #ifndef SINGE_INTERFACE_H
 #define SINGE_INTERFACE_H
 
+#include "../../video/overlay.h"
+
 // increase this number every time you change something in this file!!!
 #define SINGE_INTERFACE_API_VERSION 6
 
@@ -28,7 +30,8 @@ struct singe_in_info
 	// From video/video.h
 	Uint16 (*get_video_width)();
 	Uint16 (*get_video_height)();
-	void (*draw_string)(const char*, int, int, SDL_Surface*);
+
+	void (*draw_string)(const char*, int, int, Overlay *);
 	
 	// From sound/samples.h
 	int (*samples_play_sample)(Uint8 *pu8Buf, unsigned int uLength, unsigned int uChannels, int iSlot, void (*finishedCallback)(Uint8 *pu8Buf, unsigned int uSlot));
@@ -89,7 +92,7 @@ struct singe_out_info
 
 	// FUNCTIONS:
 	void (*sep_call_lua)(const char *func, const char *sig, ...);
-	void (*sep_do_blit)(SDL_Surface *srfDest);
+	void (*sep_do_blit)(Overlay *dest);
 	void (*sep_do_mouse_move)(Uint16 x, Uint16 y, Sint16 xrel, Sint16 yrel, Sint8 mouseID);
 	void (*sep_error)(const char *fmt, ...);
 	void (*sep_print)(const char *fmt, ...);

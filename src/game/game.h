@@ -37,6 +37,8 @@
 #ifndef GAME_H
 #define GAME_H
 
+#include "../video/overlay.h"
+
 // we allow up to triple buffering
 #define MAX_VIDEO_OVERLAY_BUFFERS 3
 
@@ -361,6 +363,9 @@ class game
                                                              // to hold
                                                              // ROM-generated
                                                              // video
+
+    Overlay m_virtual_video_overlay;
+    bool m_use_virtual_overlay = false;
 
     // fullscale variables
     SDL_Surface *m_video_overlay_scaled; // temporary graphic buffer which

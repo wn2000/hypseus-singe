@@ -47,7 +47,8 @@ include(FindPkgConfig)
 # include(ExternalProject)
 # include(BuildLibMPEG2)
 
-use_cxx11( )
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_EXE_LINKER_FLAGS "-static-libgcc -static-libstdc++")
 
 PKG_SEARCH_MODULE(SDL2 REQUIRED sdl2)
 PKG_SEARCH_MODULE(SDL2_TTF REQUIRED SDL2_ttf)
