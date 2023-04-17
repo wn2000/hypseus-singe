@@ -1537,8 +1537,6 @@ void vid_blit () {
     // }
 
     if (screen_overlay) {
-        LOGI << fmt("screen overlay: %dx%d", screen_overlay->Width(), screen_overlay->Height());
-
         screen_overlay->Render();
 
         // TODO: better palce to clear?
