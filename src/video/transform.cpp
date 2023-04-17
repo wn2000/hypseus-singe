@@ -30,6 +30,16 @@ void Transform::Update(int src_w, int src_h, const SDL_Rect& dest)
     m_trans_mat = ublas::prod(translateDest, m_trans_mat);
 }
 
+void Transform::Update(const Transform& trans)
+{
+    m_trans_mat = ublas::prod(trans.m_trans_mat, m_trans_mat);
+}
+
+void Transform::Reset()
+{
+    m_trans_mat = ublas::identity_matrix<float>(3);
+}
+
 void Transform::Map(int *x, int *y) const
 {
     ublas::c_vector<int, 3> v;

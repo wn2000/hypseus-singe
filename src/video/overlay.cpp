@@ -10,19 +10,22 @@ void Overlay::SetSize(int w, int h)
     // hack for legacy
     width = 320;
     height = 240;
+}
 
-    int canvas_w = 0;
-    int canvas_h = 0;
-    SDL_RenderGetLogicalSize(video::get_renderer(), &canvas_w, &canvas_h);
-    if (!canvas_w || !canvas_h)
-    {
-        SDL_GetRendererOutputSize(video::get_renderer(), &canvas_w, &canvas_h);
-    }
-
-    trans.Update(width, height, {0, 0, canvas_w, canvas_h});
+void Overlay::SetPosition(const SDL_Rect& dest)
+{
+    m_trans.Reset();
+    m_trans.Update(width, height, dest);
 }
 
 void Overlay::Render()
 {
-    drawlist.Render(trans);
+    drawlist.Render(m_trans);
+}
+
+void Overlay::Render(const Transform& trans)
+{
+    Transform tmpTrans = m_trans;
+    tmpTrans.Update(trans);
+    drawlist.Render(tmpTrans);
 }

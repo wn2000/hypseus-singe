@@ -56,6 +56,8 @@ void ConvertSurface(SDL_Surface **surface, const SDL_PixelFormat *fmt)
 Overlay sb_overlay;
 Overlay aux_overlay;
 Overlay leds_overlay;
+Overlay layout;
+
 Overlay *screen_overlay = nullptr;
 // Whether the overlay texture was ever updated from a real (pixel buffer based) overlay
 bool use_overlay_texture = false;
@@ -1518,13 +1520,20 @@ void vid_blit () {
 #endif
     }
 
+    SDL_Rect layout_rect{0, 0, 1080, 1920};
+    SDL_Rect video_rect{0, 500, 1080, 810};
+    SDL_RenderSetLogicalSize(g_renderer, layout_rect.w, layout_rect.h);
+
+    layout.GetDrawList().Clear();
+
     // Sadly, we have to RenderCopy the YUV texture on every blitting strike, because
     // the image on the renderer gets "dirty" with previous overlay frames on top of the yuv.
     if (g_yuv_texture) {
-        if (!g_scale_view)
-            SDL_RenderCopy(g_renderer, g_yuv_texture, NULL, NULL);
-        else
-            SDL_RenderCopy(g_renderer, g_yuv_texture, NULL, &g_scaling_rect);
+        layout.GetDrawList().Image(g_yuv_texture, video_rect);
+        // if (!g_scale_view)
+        //     SDL_RenderCopy(g_renderer, g_yuv_texture, NULL, NULL);
+        // else
+        //     SDL_RenderCopy(g_renderer, g_yuv_texture, NULL, &g_scaling_rect);
     }
 
     // If there's an overlay texture, it means we are using some kind of overlay,
@@ -1537,11 +1546,7 @@ void vid_blit () {
     // }
 
     if (screen_overlay) {
-        screen_overlay->Render();
-
-        // TODO: better palce to clear?
-        screen_overlay->GetDrawList().Clear();
-        screen_overlay = nullptr;
+        layout.GetDrawList().Image(screen_overlay, video_rect);
     } else {
         if (g_overlay_needs_update) {
             SDL_UpdateTexture(g_overlay_texture, &g_overlay_size_rect,
@@ -1552,12 +1557,21 @@ void vid_blit () {
         }
 
         if (use_overlay_texture) {
-            if (!g_scale_view)
-                SDL_RenderCopy(g_renderer, g_overlay_texture, &g_render_size_rect, NULL);
-            else
-                SDL_RenderCopy(g_renderer, g_overlay_texture,
-                               &g_render_size_rect, &g_scaling_rect);
+            layout.GetDrawList().Image(g_overlay_texture, video_rect);
+            // if (!g_scale_view)
+            //     SDL_RenderCopy(g_renderer, g_overlay_texture, &g_render_size_rect, NULL);
+            // else
+            //     SDL_RenderCopy(g_renderer, g_overlay_texture,
+            //                    &g_render_size_rect, &g_scaling_rect);
         }
+    }
+
+    layout.Render();
+
+    if (screen_overlay) {
+        // TODO: better palce to clear?
+        screen_overlay->GetDrawList().Clear();
+        screen_overlay = nullptr;
     }
 
     leds_overlay.Render();

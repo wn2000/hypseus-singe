@@ -6,7 +6,7 @@ void DrawList::Clear()
     drawlist.clear();
 }
 
-void DrawList::Image(void *texture, int x, int y, int w, int h)
+void DrawList::Image(SDL_Texture *texture, int x, int y, int w, int h)
 {
     drawlist.push_back({
         .operation = DrawOperation::IMAGE,
@@ -18,7 +18,7 @@ void DrawList::Image(void *texture, int x, int y, int w, int h)
     });
 }
 
-void DrawList::Image(void *texture, int dest_x, int dest_y, int dest_w, int dest_h, int src_x, int src_y, int src_w, int src_h)
+void DrawList::Image(SDL_Texture *texture, int dest_x, int dest_y, int dest_w, int dest_h, int src_x, int src_y, int src_w, int src_h)
 {
     drawlist.push_back({
         .operation = DrawOperation::IMAGE,
@@ -39,6 +39,16 @@ void DrawList::Image(SDL_Texture_Ptr texture, int x, int y, int w, int h)
                 -1,
         },
         .texture = std::move(texture),
+    });
+}
+
+void DrawList::Image(Overlay *overlay, const SDL_Rect& dest)
+{
+    overlay->SetPosition(dest);
+
+    drawlist.push_back({
+        .operation = DrawOperation::OVERLAY,
+        .overlay = {overlay},
     });
 }
 
@@ -64,7 +74,7 @@ void DrawList::FillRect(int x, int y, int w, int h, uint32_t color)
     });
 }
 
-void DrawList::Render()
+void DrawList::Render() const
 {
     for (const DrawItem& item: drawlist)
     {
@@ -111,10 +121,14 @@ void DrawList::Render()
                                    (item.fillrect.color >> 24) & 0xFF);
             SDL_RenderFillRect(video::get_renderer(), &dest);
         }
+        else if (item.operation == DrawOperation::OVERLAY)
+        {
+            item.overlay.overlay->Render();
+        }
     }
 }
 
-void DrawList::Render(const Transform& trans)
+void DrawList::Render(const Transform& trans) const
 {
     for (const DrawItem& item: drawlist)
     {
@@ -173,6 +187,10 @@ void DrawList::Render(const Transform& trans)
                                    (item.fillrect.color >> 16) & 0xFF,
                                    (item.fillrect.color >> 24) & 0xFF);
             SDL_RenderFillRect(video::get_renderer(), &dest);
+        }
+        else if (item.operation == DrawOperation::OVERLAY)
+        {
+            item.overlay.overlay->Render(trans);
         }
     }
 }

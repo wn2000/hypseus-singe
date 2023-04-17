@@ -12,6 +12,12 @@ public:
   // the dest rect (centered with letterbox padding).
   void Update(int src_w, int src_h, const SDL_Rect& dest);
 
+  // Apply another transform on top of self.
+  void Update(const Transform& trans);
+
+  // Resets to identity transform.
+  void Reset();
+
   void Map(int *x, int *y) const;
   void Map(int *x, int *y, int *w, int *h) const;
   void Map(SDL_Rect *rect) const {
