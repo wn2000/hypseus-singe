@@ -616,14 +616,14 @@ void tms9128nl_convert_color(unsigned char color_src, SDL_Color *color)
 // uses Cliffy's video memory to retrieve 8x8 character bitmap
 void tms9128nl_drawchar(unsigned char ch, int col, int row)
 {
-    const int CHAR_WIDTH  = 8;
-    const int CHAR_HEIGHT = 8;
+    const int CharWidth  = 8;
+    const int CharHeight = 8;
 
     int bmp_index = (ch * 8) + (g_tms_pgt_addr << 11); // index in vid mem where
                                                        // bmp data is located
     int i = 0, j = 0;                                  // temp indices
-    int x                          = col * CHAR_WIDTH;
-    int y                          = row * CHAR_HEIGHT;
+    int x                          = col * CharWidth;
+    int y                          = row * CharHeight;
     unsigned char line             = 0;
     unsigned char background_color = TMS_BG_COLOR;
 
@@ -684,11 +684,11 @@ void tms9128nl_drawchar(unsigned char ch, int col, int row)
     }
 
     // draw each line of character into new surface
-    for (i = 0; i < CHAR_HEIGHT; i++) {
+    for (i = 0; i < CharHeight; i++) {
         line = vidmem[bmp_index + i]; // get a line
 
         // handle each pixel across
-        for (j = CHAR_WIDTH - 1; j >= 0; j--) {
+        for (j = CharWidth - 1; j >= 0; j--) {
             // if rightmost bit is 1, it means draw the pixel
             if (line & 1) {
                 *((Uint8 *)g_vidbuf + ((y + i + stretch_offset) * TMS9128NL_OVERLAY_W) +
@@ -710,16 +710,16 @@ void tms9128nl_drawchar(unsigned char ch, int col, int row)
     if ((g_transparency_latch) && (ch != 0) && (ch != 0xFF)) {
         int row, col;
         Uint8 *ptr = ((Uint8 *)g_vidbuf) +
-                     ((y + stretch_offset) * TMS9128NL_OVERLAY_W) + x + CHAR_WIDTH;
-        for (row = 0; row < CHAR_HEIGHT; row++) {
-            for (col = 0; col < CHAR_WIDTH; col++) {
+                     ((y + stretch_offset) * TMS9128NL_OVERLAY_W) + x + CharWidth;
+        for (row = 0; row < CharHeight; row++) {
+            for (col = 0; col < CharWidth; col++) {
                 // make it non-transparent if it is
                 if (*ptr == TMS_TRANSPARENT_COLOR) {
                     *ptr = TMS_BG_COLOR;
                 }
                 ptr++;
             }
-            ptr += (TMS9128NL_OVERLAY_W - CHAR_WIDTH); // move to the next line
+            ptr += (TMS9128NL_OVERLAY_W - CharWidth); // move to the next line
         }
     }
 

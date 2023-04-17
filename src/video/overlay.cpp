@@ -19,8 +19,7 @@ void Overlay::SetSize(int w, int h)
         SDL_GetRendererOutputSize(video::get_renderer(), &canvas_w, &canvas_h);
     }
 
-    trans.SetLayout({0, 0, canvas_w, canvas_h},
-                    {0, 0, width, height});
+    trans.Update(width, height, {0, 0, canvas_w, canvas_h});
 }
 
 void Overlay::Render()

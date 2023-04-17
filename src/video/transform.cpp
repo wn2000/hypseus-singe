@@ -1,37 +1,51 @@
 #include "transform.h"
+#include <boost/numeric/ublas/assignment.hpp>
 
-void Transform::SetLayout(const SDL_Rect& canvas_rect, const SDL_Rect& logical_rect)
+namespace ublas = boost::numeric::ublas;
+
+void Transform::Update(int src_w, int src_h, const SDL_Rect& dest)
 {
-    canvas_center_x = canvas_rect.x + canvas_rect.w / 2;
-    canvas_center_y = canvas_rect.y + canvas_rect.h / 2;
-    logical_center_x = logical_rect.x + logical_rect.w / 2;
-    logical_center_y = logical_rect.y + logical_rect.h / 2;
+    float dest_aspect = (float)dest.w / (float)dest.h;
+    float src_aspect = (float)src_w / (float)src_h;
+    float scale = src_aspect > dest_aspect ? (float)dest.w / (float)src_w
+                                           : (float)dest.h / (float)src_h;
 
-    float canvas_aspect = (float)canvas_rect.w / (float)canvas_rect.h;
-    float logical_aspect = (float)logical_rect.w / (float)logical_rect.h;
+    ublas::c_matrix<float, 3, 3> translateSrc;
+    translateSrc <<= 1, 0, - src_w / 2,
+                     0, 1, - src_h / 2,
+                     0, 0, 1;
+    
+    ublas::c_matrix<float, 3, 3> scaling;
+    scaling <<= scale, 0, 0,
+                0, scale, 0,
+                0, 0, 1;
+    
+    ublas::c_matrix<float, 3, 3> translateDest;
+    translateDest <<= 1, 0, dest.x + dest.w / 2,
+                      0, 1, dest.y + dest.h / 2,
+                      0, 0, 1;
 
-    if (logical_aspect > canvas_aspect)
-    {
-        // letterbox in upper/lower portion
-        scale = (float)canvas_rect.w / (float)logical_rect.w;
-    }
-    else
-    {
-        // letterbox in left/right portion
-        scale = (float)canvas_rect.h / (float)logical_rect.h;
-    }
+    m_trans_mat = ublas::prod(translateSrc, m_trans_mat);
+    m_trans_mat = ublas::prod(scaling, m_trans_mat);
+    m_trans_mat = ublas::prod(translateDest, m_trans_mat);
 }
 
 void Transform::Map(int *x, int *y) const
 {
-    *x = (*x - logical_center_x) * scale + canvas_center_x;
-    *y = (*y - logical_center_y) * scale + canvas_center_y;
+    ublas::c_vector<int, 3> v;
+    v <<= *x, *y, 1;
+
+    v = ublas::prod(m_trans_mat, v);
+
+    *x = v[0];
+    *y = v[1];
 }
 
 void Transform::Map(int *x, int *y, int *w, int *h) const
 {
-    *x = (*x - logical_center_x) * scale + canvas_center_x;
-    *y = (*y - logical_center_y) * scale + canvas_center_y;
-    *w *= scale;
-    *h *= scale;
+    assert(m_trans_mat(0, 1) == 0 && m_trans_mat(1, 0) == 0);
+
+    Map(x, y);
+    *w *= m_trans_mat(0, 0);
+    *h *= m_trans_mat(1, 1);
 }

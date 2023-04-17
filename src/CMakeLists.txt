@@ -116,9 +116,20 @@ find_package(SDL2 REQUIRED)
 find_package(SDL2TTF REQUIRED)
 find_package(SDL2_IMAGE REQUIRED)
 find_package(Vorbis REQUIRED)
+find_package(Boost REQUIRED)
 
 add_executable( hypseus hypseus.cpp globals.h )
-target_link_libraries( hypseus plog io timer sound video cpu game ${Vorbis_Enc_LIBRARY} Vorbis::vorbis ${OGG_LIBRARIES} ${VORBISFILE_LIBRARIES} ${Vorbis_File_LIBRARY} ${SDL2_LIBRARIES} ${SDL2TTF_LIBRARY} ${SDL2_IMAGE_LIBRARY} )
+target_link_libraries( hypseus plog io timer sound video cpu game
+  ${Vorbis_Enc_LIBRARY}
+  Vorbis::vorbis
+  ${OGG_LIBRARIES}
+  ${VORBISFILE_LIBRARIES}
+  ${Vorbis_File_LIBRARY}
+  ${SDL2_LIBRARIES}
+  ${SDL2TTF_LIBRARY}
+  ${SDL2_IMAGE_LIBRARY}
+  Boost::boost
+)
 if(ASAN)
     target_link_options(hypseus PRIVATE -fsanitize=address -fno-omit-frame-pointer -g)
 endif()

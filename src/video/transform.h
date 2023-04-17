@@ -1,12 +1,17 @@
 #pragma once
 
 #include <SDL.h>
+#include <boost/numeric/ublas/matrix.hpp>
 
 // Maps logical rects to canvas rects.
 class Transform
 {
 public:
-  void SetLayout(const SDL_Rect& canvas_rect, const SDL_Rect& logical_rect);
+  // Adds a new transformation on top of the current one.
+  // The new transformation scales a w x h rect (positioned at (0, 0)) to fill
+  // the dest rect (centered with letterbox padding).
+  void Update(int src_w, int src_h, const SDL_Rect& dest);
+
   void Map(int *x, int *y) const;
   void Map(int *x, int *y, int *w, int *h) const;
   void Map(SDL_Rect *rect) const {
@@ -14,9 +19,6 @@ public:
   }
 
 private:
-  int canvas_center_x = 0;
-  int canvas_center_y = 0;
-  int logical_center_x = 0;
-  int logical_center_y = 0;
-  float scale = 1;
+  boost::numeric::ublas::c_matrix<float, 3, 3> m_trans_mat =
+      boost::numeric::ublas::identity_matrix<float>(3);
 };
