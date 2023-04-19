@@ -1159,26 +1159,6 @@ bool parse_cmd_line(int argc, char **argv)
             else if (strcasecmp(s, "-noissues") == 0) {
                 g_game->set_issues(NULL);
             }
-
-            // Scale the game overlay graphics to the virtual screen dimension
-            // this is needed when Hypseus is used for overlaying game graphics
-            // over the real
-            // laserdisc movie (using a video genlock), and the screen dimension
-            // is different
-            // from the dimensions of the game.
-            else if (strcasecmp(s, "-fullscale") == 0) {
-                ldp_vldp *cur_ldp =
-                    dynamic_cast<ldp_vldp *>(g_ldp); // see if the currently
-                                                     // selected LDP is VLDP
-                // if it is a vldp, then this option is not supported
-                if (cur_ldp) {
-                    printerror("Full Scale mode only works with NOLDP.");
-                    result = false;
-                } else {
-                    g_game->SetFullScale(true);
-                }
-            }
-
             // check if we need to use the SDL software renderer
             else if (strcasecmp(s, "-nohwaccel") == 0) {
                 g_game->m_sdl_software_rendering = true;
