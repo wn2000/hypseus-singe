@@ -59,7 +59,6 @@ bool g_bBootLog = true;
 lair::lair() : m_bUseAnnunciator(false), m_pScoreboard(NULL)
 {
     m_shortgamename = "lair";
-    memset(m_cpumem, 0, cpu::MEM_SIZE);
     m_switchA      = 0x22;
     m_switchB      = 0xD8;
     m_joyskill_val = 0xFF; // all input cleared
@@ -79,7 +78,7 @@ lair::lair() : m_bUseAnnunciator(false), m_pScoreboard(NULL)
                                       // convenient
     cpu.initial_pc        = 0;
     cpu.must_copy_context = false;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add this cpu to the list (it will be our only one)
 
     struct sound::chip soundchip;

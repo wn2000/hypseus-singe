@@ -51,22 +51,24 @@ class cobraconv : public game
     Uint8 m_sounddata_latch;
     Uint8 m_soundchip_id;
     Uint8 m_soundchip_address_latch;
-    Uint8 m_cpumem2[0x10000]; // 64k of space for the sound cpu
+    std::array<Uint8, 0x10000> m_cpumem2{}; // 64k of space for the sound cpu
     void draw_8x8(int, Uint8 *, int, int, int, int, int);
     void draw_16x32(int, Uint8 *, int, int, int, int, int);
     void draw_sprites(int, Uint8 *);
     Uint8 ldp_status;
-    Uint8 character1[0x6000];
-    Uint8 character2[0x6000];
-    Uint8 character[0x8000];
-    Uint8 color_prom[0x200];
-    Uint8 miscprom[0x400]; // stores unused proms, to make sure no one strips
-                           // them out
+    std::array<Uint8, 0x6000> character1{};
+    std::array<Uint8, 0x6000> character2{};
+    std::array<Uint8, 0x8000> character{};
+    std::array<Uint8, 0x200> color_prom{};
+    std::array<Uint8, 0x400> miscprom{}; // stores unused proms, to make sure no one strips
+                                         // them out
 
     bool palette_updated; // whether our color ram has been written to
-    Uint8 banks[4];       // switch banks
-                          // bank 0 is switches
-                          // bank 1 is dip switch 1
-                          // bank 2 is dip switch 2
-                          // bank 3 is vblank/ld/coin/tilt
+
+    // switch banks
+    // bank 0 is switches
+    // bank 1 is dip switch 1
+    // bank 2 is dip switch 2
+    // bank 3 is vblank/ld/coin/tilt
+    std::array<Uint8, 4> banks{0XFF, 0xFF, 0xFF, 0xFF};
 };

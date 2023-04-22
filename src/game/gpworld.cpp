@@ -56,11 +56,6 @@ gpworld::gpworld()
 
     m_shortgamename = "gpworld";
     memset(&cpu, 0, sizeof(struct cpu::def));
-    memset(banks, 0xff, 7); // fill banks with 0xFF's
-    banks[5] = 0;
-    banks[6] = 0;
-    memset(sprite, 0x00, 0x30000);   // making sure sprite[] is zero'd out
-    memset(m_cpumem, 0x00, 0x10000); // making sure m_cpumem[] is zero'd out
     palette_modified = true;
     m_disc_fps       = 29.97;
     //	m_game_type = GAME_GPWORLD;
@@ -75,7 +70,7 @@ gpworld::gpworld()
     cpu.nmi_period        = 16.6666; // nmi from LD-V1000 command strobe
     cpu.initial_pc        = 0;
     cpu.must_copy_context = false;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add a z80
 
     m_video_row_offset = 8; // shift video up by 16 pixels (8 rows)
@@ -478,7 +473,7 @@ void gpworld::repaint()
     Uint8 *sprite_base;
 
     for (spr_number = 0; spr_number < 64; spr_number++) {
-        sprite_base     = m_cpumem + GPWORLD_SPRITE_ADDRESS + 0x8 * spr_number;
+        sprite_base     = m_cpumem.data() + GPWORLD_SPRITE_ADDRESS + 0x8 * spr_number;
         sprite_top_y    = sprite_base[SPR_Y_TOP];
         sprite_bottom_y = sprite_base[SPR_Y_BOTTOM];
         if (sprite_bottom_y && (sprite_bottom_y - sprite_top_y > 0)) {
@@ -659,7 +654,7 @@ void gpworld::draw_sprite(int spr_number)
     Uint8 *sprite_base;
     int skip; /* bytes to skip before drawing each row (can be negative) */
 
-    sprite_base = m_cpumem + GPWORLD_SPRITE_ADDRESS + 0x8 * spr_number;
+    sprite_base = m_cpumem.data() + GPWORLD_SPRITE_ADDRESS + 0x8 * spr_number;
 
     src = sprite_base[SPR_GFXOFS_LO] + (sprite_base[SPR_GFXOFS_HI] << 8);
 

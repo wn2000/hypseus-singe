@@ -38,6 +38,7 @@
 #define GAME_H
 
 #include "../video/overlay.h"
+#include <array>
 
 // we allow up to triple buffering
 #define MAX_VIDEO_OVERLAY_BUFFERS 3
@@ -319,8 +320,9 @@ class game
                                  // "ace" "dle", etc)
     const struct rom_def *m_rom_list; // pointer to a null-terminated array of
                                       // roms to be loaded
-    Uint8 m_cpumem[cpu::MEM_SIZE]; // generic buffer that most 16-bit addressing
-                                   // cpu's can use
+    std::array<Uint8, cpu::MEM_SIZE> m_cpumem{}; // generic buffer that most
+                                                 // 16-bit addressing cpu's can
+                                                 // use
     unsigned int m_uDiscFPKS; // frames per kilosecond of the game's laserdisc
                               // (to avoid using gp2x-unfriendly float)
     double m_disc_fps; // frames per second of the game's laserdisc; (only used

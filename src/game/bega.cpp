@@ -55,7 +55,6 @@ bega::bega()
 
     m_shortgamename = "bega";
     memset(&cpu, 0, sizeof(struct cpu::def));
-    memset(banks, 0xFF, 3); // fill banks with 0xFF's
     // turn on diagnostics
     //	banks[2] = 0x7f;
 
@@ -86,7 +85,7 @@ bega::bega()
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true; // set this to true when you add multiple
                                   // 6502's
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add 6502 cpu
 
     memset(&cpu, 0, sizeof(struct cpu::def));
@@ -99,7 +98,7 @@ bega::bega()
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true; // set this to true when you add multiple
                                   // 6502's
-    cpu.mem = m_cpumem2;
+    cpu.mem = m_cpumem2.data();
     cpu::add(&cpu); // add sound 6502 cpu
 
     struct sound::chip soundchip;
@@ -593,10 +592,10 @@ void bega::repaint()
                  BEGA_TRANSPARENT_COLOR); // note:  using transparent color
 
     // now the sprites
-    draw_sprites(0x3800, character1);
-    draw_sprites(0x3be0, character1);
-    draw_sprites(0x2800, character2);
-    draw_sprites(0x2be0, character2);
+    draw_sprites(0x3800, character1.data());
+    draw_sprites(0x3be0, character1.data());
+    draw_sprites(0x2800, character2.data());
+    draw_sprites(0x2be0, character2.data());
 
     // draw tiles first
     for (int charx = 0; charx < 32; charx++) {
@@ -608,14 +607,14 @@ void bega::repaint()
             // draw 8x8 tiles from tile/sprite generator 2
             current_character = m_cpumem[chary * 32 + charx + 0x2800] +
                                 256 * (m_cpumem[chary * 32 + charx + 0x2c00] & 0x03);
-            draw_8x8(current_character, character2, charx * 8, chary * 8, 0, 0,
+            draw_8x8(current_character, character2.data(), charx * 8, chary * 8, 0, 0,
                      6); // this isn't the correct color... i'm not sure where
                          // color comes from right now
 
             // draw 8x8 tiles from tile/sprite generator 1
             current_character = m_cpumem[chary * 32 + charx + 0x3800] +
                                 256 * (m_cpumem[chary * 32 + charx + 0x3c00] & 0x03);
-            draw_8x8(current_character, character1, charx * 8, chary * 8, 0, 0,
+            draw_8x8(current_character, character1.data(), charx * 8, chary * 8, 0, 0,
                      6); // this isn't the correct color... i'm not sure where
                          // color comes from right now
 

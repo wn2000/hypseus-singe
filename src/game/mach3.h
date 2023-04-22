@@ -29,8 +29,6 @@
 
 #include <queue> // for testing, can be replaced with array later
 
-using namespace std;
-
 #define MACH3_CPU_HZ 20000000 // speed of cpu (5 MHz)
 
 #define MACH3_OVERLAY_W 256 // width of overlay
@@ -64,11 +62,11 @@ class mach3 : public game
     //	void set_version(int);
     //	bool handle_cmdline_arg(const char *arg);
     void patch_roms();
-    Uint8 character[0x2000]; // character gfx ROM (8KB)
-    Uint8 sprite[0x10000]; // sprite gfx ROM (64KB for UVT, 32KB for MACH3)
-    Uint8 m_cpumem2[0x10000]; // memory space for first 6502
-    Uint8 m_cpumem3[0x10000]; // memory space for second 6502
-    Uint8 targetdata[0x100000];
+    std::array<Uint8, 0x2000> character{}; // character gfx ROM (8KB)
+    std::array<Uint8, 0x10000> sprite{}; // sprite gfx ROM (64KB for UVT, 32KB for MACH3)
+    std::array<Uint8, 0x10000> m_cpumem2{}; // memory space for first 6502
+    std::array<Uint8, 0x10000> m_cpumem3{}; // memory space for second 6502
+    std::array<Uint8, 0x100000> targetdata{};
     Uint32 m_current_targetdata; // pointer to active buffer within target data
 
   protected:
@@ -107,11 +105,9 @@ class mach3 : public game
 
     bool m_soundchip2_nmi_enabled;
     unsigned int m_last0x4000;
-    queue<Uint8> m_sounddata_latch1;
-    queue<Uint8> m_sounddata_latch2;
+    std::queue<Uint8> m_sounddata_latch1;
+    std::queue<Uint8> m_sounddata_latch2;
     Uint8 m_psg_latch;
-
-  private:
 };
 
 // Us Vs Them

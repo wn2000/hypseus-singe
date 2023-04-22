@@ -57,11 +57,11 @@ class interstellar : public game
     SDL_Color m_background_color;
     Uint8 m_soundchip1_id;
     Uint8 m_soundchip2_id;
-    Uint8 character[0x6000];
-    Uint8 color_prom[0x300];
-    Uint8 banks[3];
-    Uint8 m_cpumem2[0x10000]; // memory space for the second z80
-    Uint8 m_cpumem3[0x10000]; // memory space for the third z80
+    std::array<Uint8, 0x6000> character{};
+    std::array<Uint8, 0x300> color_prom{};
+    std::array<Uint8, 3> banks{};
+    std::array<Uint8, 0x10000> m_cpumem2{}; // memory space for the second z80
+    std::array<Uint8, 0x10000> m_cpumem3{}; // memory space for the third z80
     Uint8 cpu_latch1;
     Uint8 cpu_latch2;
     Uint8 sound_latch;

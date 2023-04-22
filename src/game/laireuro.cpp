@@ -49,7 +49,6 @@ laireuro::laireuro()
 
     m_shortgamename = "laireuro";
     memset(&cpu, 0, sizeof(struct cpu::def));
-    memset(m_banks, 0xFF, 4); // m_banks are active low
 
     m_disc_fps  = 25.0;
     m_game_type = GAME_LAIREURO;
@@ -58,7 +57,7 @@ laireuro::laireuro()
     cpu.hz                = LAIREURO_CPU_HZ;
     cpu.nmi_period        = 1000 / 50;
     cpu.must_copy_context = false;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu);
 
     cpu::change_interleave(100); // make it update the irqs every 1/3 of a ms

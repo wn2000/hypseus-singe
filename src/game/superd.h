@@ -59,13 +59,15 @@ class superd : public game
     Uint8 m_soundchip_id;
     Uint8 ldp_output_latch;  // holds data to be sent to the LDV1000
     Uint8 ldp_input_latch;   // holds data that was retrieved from the LDV1000
-    Uint8 character[0x2000]; // character ram
-    Uint8 color_prom[0x20];
-    Uint8 banks[4]; // superdon's banks
-                    // bank 1 is joystick
-                    // bank 2 is buttons
-                    // bank 3 is dip switch 1
-                    // bank 4 is dip switch 2
+    std::array<Uint8, 0x2000> character{}; // character ram
+    std::array<Uint8, 0x20> color_prom{};
+
+    // superdon's banks
+    // bank 1 is joystick
+    // bank 2 is buttons
+    // bank 3 is dip switch 1
+    // bank 4 is dip switch 2
+    std::array<Uint8, 4> banks{0xFF, 0xFF, 0xFF, 0xFF};
 };
 
 class sdqshort : public superd

@@ -48,7 +48,6 @@ thayers::thayers() : m_pScoreboard(NULL)
 
     m_shortgamename = "tq";
     memset(&cpu, 0, sizeof(struct cpu::def));
-    memset(banks, 0xFF, 2); // fill banks with 0xFF's
     banks[0]    = 0x0;      // put it on free play
     m_disc_fps  = 29.97;
     m_game_type = GAME_THAYERS;
@@ -60,7 +59,7 @@ thayers::thayers() : m_pScoreboard(NULL)
     cpu.nmi_period        = 30.0; // the actual value here isn't important
     cpu.initial_pc        = 0;
     cpu.must_copy_context = false;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu);
 
     cpu.type = cpu::type::COP421;
@@ -68,7 +67,7 @@ thayers::thayers() : m_pScoreboard(NULL)
                                         // externally and 32 internally
     cpu.nmi_period        = 0;
     cpu.must_copy_context = false;
-    cpu.mem = coprom;
+    cpu.mem = coprom.data();
     cpu::add(&cpu);
 
     m_irq_status = 0x3f;

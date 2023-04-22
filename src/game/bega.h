@@ -78,14 +78,16 @@ class bega : public game
     Uint8 ldp_status;
     bool vblank;
     void recalc_palette();
-    Uint8 m_cpumem2[0x10000];
+    std::array<Uint8, 0x10000> m_cpumem2{};
     Uint8 mc6850_status;
-    Uint8 character1[0x6000];
-    Uint8 character2[0x6000];
-    Uint8 banks[3]; // bega's banks
-                    // bank 1 is switches
-                    // bank 2 is dip switch 1
-                    // bank 3 is dip switch 2
+    std::array<Uint8, 0x6000> character1{};
+    std::array<Uint8, 0x6000> character2{};
+
+    // bega's banks
+    // bank 1 is switches
+    // bank 2 is dip switch 1
+    // bank 3 is dip switch 2
+    std::array<Uint8, 3> banks{0xFF, 0xFF, 0xFF};
 };
 
 class cobra : public bega

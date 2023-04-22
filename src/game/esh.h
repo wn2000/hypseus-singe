@@ -50,17 +50,19 @@ class esh : public game
     void set_version(int);
 
   protected:
-    Uint8 character[0x8000];
-    Uint8 miscprom[0x200];
-    Uint8 color_prom[0x200];
+    std::array<Uint8, 0x8000> character{};
+    std::array<Uint8, 0x200> miscprom{};
+    std::array<Uint8, 0x200> color_prom{};
 
   private:
     bool m_needlineblink, m_needcharblink;
     int blank_count;
     Uint8 palette_high_bit;
-    Uint8 banks[4]; // esh's banks
-                    // bank 1 is switches
-                    // bank 2 is switches
-                    // bank 3 is dip switch 1
-                    // bank 4 is dip switch 2
+
+    // esh's banks
+    // bank 1 is switches
+    // bank 2 is switches
+    // bank 3 is dip switch 1
+    // bank 4 is dip switch 2
+    std::array<Uint8, 4> banks{0xFF, 0xFF, 0xFF, 0xFF};
 };

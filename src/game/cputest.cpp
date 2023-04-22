@@ -54,7 +54,7 @@ cputest::cputest() : m_uZeroCount(0), m_bStarted(false)
     cpu.hz                = 2000000000; // 2000 mhz (fast as possible)!
     cpu.initial_pc        = 0x100;
     cpu.must_copy_context = false;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add this cpu to the list (it will be our only one)
 
     m_disc_fps = 29.97; // for now this needs _some_ value for vblank purposes
@@ -111,7 +111,7 @@ void cputest::update_pc(Uint32 new_pc)
     // (indicating pass or fail)
     else if (new_pc == 5) {
         Uint8 command  = Z80_GET_BC & 0x0F;
-        Uint8 *membase = m_cpumem;
+        Uint8 *membase = m_cpumem.data();
 
         // if C is 9 when '5' is called, it means to print a $-terminated
         // message to the screen

@@ -36,7 +36,6 @@
 timetrav::timetrav()
 {
     m_shortgamename = "timetrav";
-    memset(m_cpumem, 0, cpu::MEM_SIZE);
 
     struct cpu::def cpu;
     memset(&cpu, 0, sizeof(struct cpu::def));
@@ -47,7 +46,7 @@ timetrav::timetrav()
     cpu.nmi_period        = (1000.0 / 59.94);
     cpu.initial_pc        = 0xFFFF0;
     cpu.must_copy_context = false;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add this cpu to the list (it will be our only one)
 
     m_disc_fps = 29.97;

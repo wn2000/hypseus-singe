@@ -92,7 +92,7 @@ cliff::cliff()
     cpu.must_copy_context = false;
     cpu.irq_period[0]     = CLIFF_IRQ_PERIOD;
     cpu.nmi_period        = CLIFF_NMI_PERIOD;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add z80 cpu
 
     m_num_sounds              = 3;

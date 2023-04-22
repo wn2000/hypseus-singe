@@ -89,12 +89,12 @@ class astron : public game
     int current_bank;
     void recalc_palette();
     void draw_sprite(int);
-    Uint8 rombank[0x8000];
-    Uint8 character[0x1000];
-    Uint8 sprite[0x10000];
-    Uint8 bankprom[0x200];
-    Uint8 miscprom[0x240];
-    SDL_Color palette_lookup[4096]; // all possible color entries
+    std::array<Uint8, 0x8000> rombank{};
+    std::array<Uint8, 0x1000> character{};
+    std::array<Uint8, 0x10000> sprite{};
+    std::array<Uint8, 0x200> bankprom{};
+    std::array<Uint8, 0x240> miscprom{};
+    std::array<SDL_Color, 4096> palette_lookup{}; // all possible color entries
     Uint8 m_transparent_color;      // which color is to be transparent
     bool palette_modified;          // has our palette been modified?
     bool compress_palette; // can we compress the palette into one 8 bit

@@ -128,7 +128,7 @@ int g_key_defs[SWITCH_COUNT][2] = {
 
 ////////////
 
-int joystick_buttons_map[SWITCH_COUNT][2] = {
+std::vector<std::vector<int>> joystick_buttons_map = {
     {0, 0}, // up
     {0, 0}, // left
     {0, 0}, // down

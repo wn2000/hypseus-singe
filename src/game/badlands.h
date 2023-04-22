@@ -65,12 +65,14 @@ class badlands : public game
     bool irq_on;
     bool nmi_on;
     bool transparent;
-    Uint8 character[0x2000];
-    Uint8 color_prom[0x20];
-    Uint8 banks[3]; // badlands's banks
-                    // bank 1 is switches
-                    // bank 2 is dip switch 1
-                    // bank 3 is dip switch 2
+    std::array<Uint8, 0x2000> character{};
+    std::array<Uint8, 0x20> color_prom{};
+
+    // badlands's banks
+    // bank 1 is switches
+    // bank 2 is dip switch 1
+    // bank 3 is dip switch 2
+    std::array<Uint8, 3> banks{0xFF, 0xFF, 0xFF};
 };
 
 class badlandp : public badlands

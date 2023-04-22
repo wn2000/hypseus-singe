@@ -43,7 +43,7 @@ mcputest::mcputest()
     cpu.nmi_period        = 500.0;   // 2 NMIs per second
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add this cpu to the list
 
     m_game_uses_video_overlay = false;

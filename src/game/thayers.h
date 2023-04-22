@@ -69,17 +69,19 @@ class thayers : public game
 
   protected:
     //	void string_draw(char*, int, int);
-    Uint8 coprom[0x400];
+    std::array<Uint8, 0x400> coprom{};
     bool key_press;
     Uint8 cop_read_latch;
     Uint8 cop_write_latch;
     Uint8 cop_g_read_latch;
     Uint8 cop_g_write_latch;
     Uint8 m_irq_status;
-    Uint8 banks[4]; // thayers's banks
-                    // bank 1 is Dip Bank A
+
+    // thayers's banks
+    // bank 1 is Dip Bank A
     // bank 2 is bits 0-3 is Dip Bank B, 4 and 5 Coin 1 and 2, 6 and 7 laserdisc
     // ready
+    std::array<Uint8, 4> banks{0xFF, 0xFF};
 
   private:
     // Overlay text control stuff.

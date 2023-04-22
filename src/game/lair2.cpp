@@ -211,7 +211,6 @@ lair2::lair2()
       m_bSerialHack(false)
 {
     m_shortgamename = "lair2";
-    memset(m_cpumem, 0, cpu::MEM_SIZE);
     memset(EEPROM_9536, 0, sizeof(EEPROM_9536));
     m_uCoinCount[0] = m_uCoinCount[1] = 0;
     banks[0] = 0xff; // bank 0 is active low
@@ -238,7 +237,7 @@ lair2::lair2()
     cpu.initial_pc = 0xFFFF0; // the ROM copies itself to 1000:0000 and starts
                               // there, but the intial entry is here
     cpu.must_copy_context = false;
-    cpu.mem               = m_cpumem;
+    cpu.mem               = m_cpumem.data();
 
     m_EEPROM_9536       = true;
     m_EEPROM_9536_begin = &EEPROM_9536[0x00];

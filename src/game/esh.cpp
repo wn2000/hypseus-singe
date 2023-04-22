@@ -55,7 +55,6 @@ esh::esh() : m_needlineblink(false), m_needcharblink(false)
 
     m_shortgamename = "esh";
     memset(&cpu, 0, sizeof(struct cpu::def));
-    memset(banks, 0xFF, 4); // fill banks with 0xFF's
 
     // assuming we won't have any nvram saved, set these values.
     // If we do have nvram, these will be overwritten.
@@ -78,7 +77,7 @@ esh::esh() : m_needlineblink(false), m_needcharblink(false)
     cpu.nmi_period        = (1000.0 / 60.0); // nmi from LD-V1000 command strobe
                                              // (likely guess)
     cpu.irq_period[0] = (1000.0 / 60.0);     // irq from vblank (guess)
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add z80 cpu
 
     blank_count      = 0;

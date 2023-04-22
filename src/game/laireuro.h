@@ -89,9 +89,9 @@ class laireuro : public game
 
   protected:
     Uint8 m_wt_misc;
-    Uint8 m_character[0x2000];
+    std::array<Uint8, 0x2000> m_character{};
     SDL_Color m_colors[LAIREURO_COLOR_COUNT];
-    Uint8 m_banks[4];
+    std::array<Uint8, 4> m_banks{0xFF, 0xFF, 0xFF, 0xFF};
 };
 
 class aceeuro : public laireuro

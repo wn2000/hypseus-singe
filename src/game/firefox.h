@@ -52,15 +52,17 @@ class firefox : public game
     void recalc_palette(void);
     int current_bank;
     void display_update();
-    Uint8 character[0x2000];
-    Uint8 rombank[0x10000];
-    Uint8 banks[6]; // firefox's banks
-                    // bank 0 is RDIN0
-                    // bank 1 is RDIN1
-                    // bank 2 is dip switch 1
-                    // bank 3 is dip switch 2
-                    // bank 4 is a/d channel 0
-                    // bank 5 is a/d channel 1
+    std::array<Uint8, 0x2000> character{};
+    std::array<Uint8, 0x10000> rombank{};
+
+    // firefox's banks
+    // bank 0 is RDIN0
+    // bank 1 is RDIN1
+    // bank 2 is dip switch 1
+    // bank 3 is dip switch 2
+    // bank 4 is a/d channel 0
+    // bank 5 is a/d channel 1
+    std::array<Uint8, 6> banks{0xFF, 0xFF, 0xFF, 0xFF};
 
     // buffer that holds byte to be sent to LDP (8-bits)
     Uint8 m_u8DskLatch;

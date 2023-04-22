@@ -94,8 +94,7 @@ firefox::firefox()
 
     m_shortgamename = "firefox";
     memset(&cpu, 0, sizeof(struct cpu::def));
-    memset(banks, 0xFF, 4); // fill banks with 0xFF's
-                            //	banks[0] = 0xfb;
+    //	banks[0] = 0xfb;
     banks[1]   = 0x1f;
     banks[4]   = 0x00;
     banks[5]   = 0x00;
@@ -132,7 +131,7 @@ firefox::firefox()
 
     cpu.initial_pc        = 0;
     cpu.must_copy_context = false; // set to true for multiple 6809's
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add a 6809 cpu
 
     ad_converter_channel = 0;

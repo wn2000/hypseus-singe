@@ -1566,6 +1566,8 @@ void vid_blit () {
         }
     }
 
+    layout.GetDrawList().Image(&leds_overlay, video_rect);
+
     layout.Render();
 
     if (screen_overlay) {
@@ -1574,7 +1576,8 @@ void vid_blit () {
         screen_overlay = nullptr;
     }
 
-    leds_overlay.Render();
+    // leds_overlay.Render();
+
     if (g_scoreboard_needs_update) {
         g_scoreboard_needs_update = false;
     }

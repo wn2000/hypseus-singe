@@ -77,9 +77,6 @@
 mach3::mach3()
 {
     m_shortgamename = "mach3";
-    memset(m_cpumem, 0, sizeof(m_cpumem));
-    memset(m_cpumem2, 0, sizeof(m_cpumem2));
-    memset(m_cpumem3, 0, sizeof(m_cpumem3));
 
     struct cpu::def cpu;
     memset(&cpu, 0, sizeof(struct cpu::def));
@@ -94,7 +91,7 @@ mach3::mach3()
                              // be mirrored up at F000:FFF0,
     // but we'll just access it from here
     cpu.must_copy_context = false;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add this cpu to the list (it will be our only one)
 
     cpu.type              = cpu::type::M6502;
@@ -104,7 +101,7 @@ mach3::mach3()
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true; // set this to true when you add multiple
                                   // 6502's
-    cpu.mem = m_cpumem2;
+    cpu.mem = m_cpumem2.data();
     cpu::add(&cpu); // add first sound 6502 cpu
 
     cpu.type          = cpu::type::M6502;
@@ -115,7 +112,7 @@ mach3::mach3()
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true; // set this to true when you add multiple
                                   // 6502's
-    cpu.mem = m_cpumem3;
+    cpu.mem = m_cpumem3.data();
     cpu::add(&cpu); // add second sound 6502 cpu
 
     struct sound::chip soundchip;
@@ -1132,7 +1129,7 @@ void mach3::draw_characters()
         for (int chary = 0; chary < 30; chary++) {
             // draw 8x8 tiles from character generator
             int current_character = m_cpumem[chary * 32 + charx + 0x3800];
-            draw_8x8(current_character, character, charx * 8, chary * 8);
+            draw_8x8(current_character, character.data(), charx * 8, chary * 8);
         }
     }
 }

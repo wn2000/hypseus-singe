@@ -146,7 +146,7 @@ void DrawList::Render(const Transform& trans) const
             {
                 SDL_Rect src{item.image.src_x, item.image.src_y,
                              item.image.src_w, item.image.src_h};
-                trans.Map(&src);
+                // trans.Map(&src);
 
                 SDL_RenderCopy(video::get_renderer(), (SDL_Texture *)item.image.texture, &src, &dest);
             }
@@ -165,7 +165,7 @@ void DrawList::Render(const Transform& trans) const
             {
                 SDL_Rect src{item.image_one_time.src_x, item.image_one_time.src_y,
                              item.image_one_time.src_w, item.image_one_time.src_h};
-                trans.Map(&src);
+                // trans.Map(&src);
 
                 SDL_RenderCopy(video::get_renderer(), item.texture.get(), &src, &dest);
             }

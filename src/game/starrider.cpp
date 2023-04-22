@@ -76,7 +76,6 @@ starrider::starrider()
 
     m_shortgamename = "starrider";
     memset(&cpu, 0, sizeof(struct cpu::def));
-    memset(banks, 0xFF, 3); // fill banks with 0xFF's
     m_game_type = GAME_STARRIDER;
     m_disc_fps  = 29.97;
 
@@ -87,7 +86,7 @@ starrider::starrider()
     cpu.nmi_period        = (1000.0 / 60.0); // nmi from ?? strobe
     cpu.irq_period[0]     = (1000.0 / (10.20 * 60.0)); // firq 8 * hblank + irq +
                                                        // nmi
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add 6809
 
     //	m_transparent_color = 0;

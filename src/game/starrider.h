@@ -48,12 +48,14 @@ class starrider : public game
     bool firq_on;
     bool irq_on;
     bool nmi_on;
-    Uint8 character[0x2000];
-    Uint8 rombank1[0xa000];
-    Uint8 rombank2[0x4000];
+    std::array<Uint8, 0x2000> character{};
+    std::array<Uint8, 0xa000> rombank1{};
+    std::array<Uint8, 0x4000> rombank2{};
     //	SDL_Color colors[16];	// color palette
-    Uint8 banks[3]; // starrider's banks
-                    // bank 1 is switches
-                    // bank 2 is dip switch 1
-                    // bank 3 is dip switch 2
+
+    // starrider's banks
+    // bank 1 is switches
+    // bank 2 is dip switch 1
+    // bank 3 is dip switch 2
+    std::array<Uint8, 3> banks{0xFF, 0xFF, 0xFF};
 };

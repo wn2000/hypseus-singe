@@ -47,7 +47,6 @@ badlands::badlands()
     struct cpu::def cpu;
 
     m_shortgamename = "badlands";
-    memset(banks, 0xFF, 3); // fill banks with 0xFF's
     m_game_type = GAME_BADLANDS;
     m_disc_fps  = 29.97;
 
@@ -63,7 +62,7 @@ badlands::badlands()
     cpu.irq_period[0]     = (1000.0 / 59.94);       // irq from strobe
     cpu.irq_period[1]     = (1000.0 / 8.0 / 59.94); // firq 8 times per vblank
     cpu.nmi_period        = (1000.0 / 59.94);       // nmi from vblank
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add 6809 cpu
 
     struct sound::chip soundchip;

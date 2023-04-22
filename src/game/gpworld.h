@@ -68,18 +68,18 @@ class gpworld : public game
   protected:
     void recalc_palette();
     void draw_sprite(int);
-    Uint8 rombank[0x8000];
-    Uint8 character[0x1000];
-    Uint8 sprite[0x30000];
-    Uint8 miscprom[0x220];
-    SDL_Color palette_lookup[4096]; // all possible color entries
+    std::array<Uint8, 0x8000> rombank{};
+    std::array<Uint8, 0x1000> character{};
+    std::array<Uint8, 0x30000> sprite{};
+    std::array<Uint8, 0x220> miscprom{};
+    std::array<SDL_Color, 4096> palette_lookup{}; // all possible color entries
     int tile_color_pointer[256];
     Uint8 m_transparent_color; // which color is to be transparent
     bool palette_modified;     // has our palette been modified?
     Uint8 ldp_output_latch;    // holds data to be sent to the LDV1000
     Uint8 ldp_input_latch;     // holds data that was retrieved from the LDV1000
     bool nmie;
-    Uint8 banks[7];
+    std::array<Uint8, 7> banks{0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0x00, 0x00};
 };
 
 #endif

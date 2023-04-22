@@ -52,7 +52,6 @@ cobraconv::cobraconv()
     struct cpu::def cpu;
 
     m_shortgamename = "cobraconv";
-    memset(banks, 0xFF, 4); // fill banks with 0xFF's
 
     //	m_game_type = GAME_BEGA;
     m_disc_fps = 29.97;
@@ -70,7 +69,7 @@ cobraconv::cobraconv()
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true; // set this to true when you add multiple
                                   // 6502's
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add 6502 cpu
 
     memset(&cpu, 0, sizeof(struct cpu::def));
@@ -82,7 +81,7 @@ cobraconv::cobraconv()
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true; // set this to true when you add multiple
                                   // 6502's
-    cpu.mem = m_cpumem2;
+    cpu.mem = m_cpumem2.data();
     cpu::add(&cpu); // add 6502 cpu
 
     struct sound::chip soundchip;
@@ -115,9 +114,9 @@ cobraconv::cobraconv()
          {"bd07", NULL, &m_cpumem2[0xe000], 0x2000, 0x584d714a},
 
          // roms for the character/sprite generator (conv board only has one)
-         {"bd06", NULL, &character2[0x0000], 0x2000, 0xb1340125},
-         {"bd05", NULL, &character2[0x2000], 0x2000, 0x98412178},
-         {"bd04", NULL, &character2[0x4000], 0x2000, 0x33013cc2},
+         {"bd06", NULL, &character2.data()[0x0000], 0x2000, 0xb1340125},
+         {"bd05", NULL, &character2.data()[0x2000], 0x2000, 0x98412178},
+         {"bd04", NULL, &character2.data()[0x4000], 0x2000, 0x33013cc2},
 
          // color lookup prom
          {"vd0-c.bpr", NULL, &color_prom[0x0000], 0x0020, 0x2c27aa0},
@@ -407,7 +406,7 @@ void cobraconv::repaint()
     SDL_FillRect(m_video_overlay[m_active_video_overlay], NULL, 0);
 
     // draw sprites first(?)
-    draw_sprites(0x2800, character2);
+    draw_sprites(0x2800, character2.data());
 
     // draw tiles
     for (int charx = 0; charx < 32; charx++) {
@@ -416,7 +415,7 @@ void cobraconv::repaint()
             // draw 8x8 tiles from tile/sprite generator 2
             int current_character = m_cpumem[chary * 32 + charx + 0x2800] +
                                     256 * (m_cpumem[chary * 32 + charx + 0x2c00] & 0x03);
-            draw_8x8(current_character, character2, charx * 8, chary * 8, 0, 0,
+            draw_8x8(current_character, character2.data(), charx * 8, chary * 8, 0, 0,
                      (m_cpumem[0x1001] >> 4) & 3); // this is a decent guess
                                                    // about the color selection
 
@@ -424,7 +423,7 @@ void cobraconv::repaint()
             // draw 8x8 tiles from tile/sprite generator 1
             current_character = m_cpumem[chary * 32 + charx + 0x2000] +
                                 256 * (m_cpumem[chary * 32 + charx + 0x2400] & 0x03);
-            if (c) draw_8x8(current_character, character2,
+            if (c) draw_8x8(current_character, character2.data(),
                      // charx*8, chary*8,  // x/y swapped vs Bega's Battle
                      // hardware
                      chary * 8, charx * 8, 0, 0,

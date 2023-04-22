@@ -141,7 +141,6 @@ superd::superd()
 
     m_shortgamename = "sdq";
     memset(&cpu, 0, sizeof(struct cpu::def));
-    memset(banks, 0xFF, 4); // fill banks with 0xFF's
     m_video_overlay[m_active_video_overlay] = NULL;
 
     m_disc_fps  = 29.97;
@@ -158,7 +157,7 @@ superd::superd()
     cpu.initial_pc        = 0;
     cpu.must_copy_context = false;
     cpu.nmi_period        = 0.0;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add this cpu to the list
 
     struct sound::chip soundchip;

@@ -55,17 +55,17 @@ class lgp : public game
     Uint8 m_soundchip2_address_latch;
     Uint8 m_soundchip3_address_latch;
     Uint8 m_soundchip4_address_latch;
-    Uint8 m_cpumem2[0x10000];
+    std::array<Uint8, 0x10000> m_cpumem2{};
     void draw_sprite(int);
     Uint8 m_ldp_write_latch;
     Uint8 m_ldp_read_latch;
-    Uint8 m_character[0x8000];
+    std::array<Uint8, 0x8000> m_character{};
     Uint8 m_transparent_color; // which color is to be transparent
     bool palette_modified;     // has our palette been modified?
     Uint8 ldp_output_latch;    // holds data to be sent to the LDV1000
     Uint8 ldp_input_latch;     // holds data that was retrieved from the LDV1000
     bool nmie;
-    Uint8 banks[7];
+    std::array<Uint8, 7> banks{};
     void recalc_palette();
     void draw_8x8(int character_number, int xcoord, int ycoord);
 };

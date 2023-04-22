@@ -110,7 +110,7 @@ interstellar::interstellar()
     cpu.hz                = INTERSTELLAR_CPU_SPEED; // unverified
     cpu.irq_period[0]     = (1000.0 / 59.94); // this appears to be from vblank
     cpu.nmi_period        = 0;                // these come from coin inserts
-    cpu.mem               = m_cpumem;
+    cpu.mem               = m_cpumem.data();
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true;
     cpu::add(&cpu); // add Z80 cpu
@@ -121,7 +121,7 @@ interstellar::interstellar()
     cpu.irq_period[0] = 0;
     cpu.nmi_period    = 0; // these come from the main cpu writing to the sound
                            // latch
-    cpu.mem               = m_cpumem2;
+    cpu.mem               = m_cpumem2.data();
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true;
     cpu::add(&cpu); // add Z80 cpu
@@ -131,7 +131,7 @@ interstellar::interstellar()
     cpu.hz                = INTERSTELLAR_CPU_SPEED; // unverified
     cpu.irq_period[0]     = (1000.0 / 59.94); // from ld-v1000 status strobe
     cpu.nmi_period        = 0.0;              // caused by writes from main cpu
-    cpu.mem               = m_cpumem3;
+    cpu.mem               = m_cpumem3.data();
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true;
     cpu::add(&cpu); // add Z80 cpu

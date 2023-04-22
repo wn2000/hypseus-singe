@@ -51,9 +51,8 @@ lgp::lgp()
 
     m_shortgamename = "lgp";
     memset(&cpu, 0, sizeof(struct cpu::def));
-    memset(m_cpumem, 0x00, 0x10000);  // making sure m_cpumem[] is zero'd out
-    memset(m_cpumem2, 0x00, 0x10000); // making sure m_cpumem2[] is zero'd out
-    memset(banks, 0x00, 7);           // fill banks with 0xFF's
+    // FIXME: 0x00 or 0xFF?
+    // memset(banks, 0x00, 7);           // fill banks with 0xFF's
     palette_modified = true;
     m_disc_fps       = 29.97;
 
@@ -67,7 +66,7 @@ lgp::lgp()
     cpu.nmi_period        = 0;       // nmi from sound chip?
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true;
-    cpu.mem = m_cpumem;
+    cpu.mem = m_cpumem.data();
     cpu::add(&cpu); // add a z80
 
     cpu.type              = cpu::type::Z80;
@@ -76,7 +75,7 @@ lgp::lgp()
     cpu.nmi_period        = 0;
     cpu.initial_pc        = 0;
     cpu.must_copy_context = true;
-    cpu.mem = m_cpumem2;
+    cpu.mem = m_cpumem2.data();
     cpu::add(&cpu); // add a z80
 
     struct sound::chip soundchip;
