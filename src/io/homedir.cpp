@@ -8,18 +8,8 @@
 #include "mpo_fileio.h"
 #include "conout.h"
 
-#ifdef WIN32
-// for CreateDirectory
-#include <windows.h>
-#endif
-
-#ifdef UNIX
-// for mkdir
-#include <sys/stat.h>
-#include <sys/types.h>
-#endif
-
-using namespace std;
+#include <filesystem>
+namespace fs = std::filesystem;
 
 homedir g_homedir; // our main homedir class (statically allocated to minimize
                    // risk of memory leak)
@@ -32,68 +22,53 @@ homedir::homedir()
     m_homedir = "."; // using curdir is a sensible default for the constructor
 }
 
-string homedir::get_homedir() { return m_homedir; }
-
-// helper function
-void homedir::make_dir(const string &dir)
-{
-#ifdef WIN32
-    CreateDirectory(dir.c_str(), NULL); // create directory if it does not
-                                        // already exist
-#else
-    unsigned int oldumask = umask(022);
-    mkdir(dir.c_str(), 0777); // create directory if it does not already exist
-    umask(oldumask);
-#endif
-}
+string homedir::get_homedir() const { return m_homedir; }
 
 void homedir::set_homedir(const string &s)
 {
     m_homedir = s;
 
     // create writable directories if they don't exist
-    make_dir(m_homedir);
-    make_dir(m_homedir + "/ram");
-    make_dir(m_homedir + "/roms");
-    make_dir(m_homedir + "/logs");
-    make_dir(m_homedir + "/fonts");
-    make_dir(m_homedir + "/bezels");
-    make_dir(m_homedir + "/screenshots");
+    fs::path homepath = m_homedir;
+    fs::create_directories(homepath);
+    fs::create_directories(homepath / "ram");
+    fs::create_directories(homepath / "roms");
+    fs::create_directories(homepath / "logs");
+    fs::create_directories(homepath / "fonts");
+    fs::create_directories(homepath / "bezels");
+    fs::create_directories(homepath / "screenshots");
 }
 
-string homedir::get_romfile(const string &s)
+string homedir::get_romfile(const string &s) const
 {
-    return find_file("roms/" + s, true);
+    return find_file((fs::path("roms") / s).string(), true);
 }
 
-string homedir::get_ramfile(const string &s)
+string homedir::get_ramfile(const string &s) const
 {
-    return find_file("ram/" + s, false);
+    return find_file((fs::path("ram") / s).string(), false);
 }
 
-string homedir::get_framefile(const string &s)
+string homedir::get_framefile(const string &s) const
 {
     // Framefiles may be passed as a fully-qualified path.  If so, see if it
     // exists first before trying the directories.
     if (mpo_file_exists(s.c_str())) {
         return s;
-    } else {
-        return find_file("framefile/" + s, true);
     }
+
+    return find_file((fs::path("framefile") / s).string(), true);
 }
 
-string homedir::find_file(string fileName, bool bFallback)
+string homedir::find_file(const string& fileName, bool bFallback) const
 {
-    string strFile = fileName;
-    string result  = "";
-
     // try homedir first
-    result = m_homedir + "/" + strFile;
+    string result = (fs::path(m_homedir) / fileName).string();
 
     // if file does not exist in home directory and we are allowed to fallback
     // to app dir
-    if (bFallback && !mpo_file_exists(result.c_str())) {
-        result = m_appdir + "/" + strFile;
+    if (!mpo_file_exists(result.c_str()) && bFallback) {
+        result = (fs::path(m_appdir) / fileName).string();
     }
     // else file either exists or we cannot fall back
 
