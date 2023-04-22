@@ -256,9 +256,6 @@ class game
     SDL_Surface *get_active_video_overlay(); // returns the current active video
                                              // overlay (that is currently being
                                              // drawn)
-    SDL_Surface *get_finished_video_overlay(); // returns the last complete
-                                               // video overlay (that isn't
-                                               // currently being drawn)
     bool is_overlay_size_dynamic(); // returns m_overlay_size_is_dynamic
 
     void enable_cheat();
@@ -368,8 +365,6 @@ class game
     int m_active_video_overlay; // index of the active SDL_Surface that serves
                                 // as our video overlay (the one we make changes
                                 // to)
-    int m_finished_video_overlay; // index of the last SDL_Surface to be
-                                  // completely drawn (ie finished)
     int m_palette_color_count; // the # of colors to be allocated for the color
                                // palette, not to exceed 256 (surfaces are only
                                // 8-bit)
