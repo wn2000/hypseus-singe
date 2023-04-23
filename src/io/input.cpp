@@ -128,7 +128,7 @@ int g_key_defs[SWITCH_COUNT][2] = {
 
 ////////////
 
-std::vector<std::vector<int>> joystick_buttons_map = {
+int joystick_buttons_map[SWITCH_COUNT][2] = {
     {0, 0}, // up
     {0, 0}, // left
     {0, 0}, // down
@@ -161,10 +161,7 @@ int joystick_axis_map[SWITCH_START1][3] = {
 };
 
 // Game controller triggers activated
-int controller_trigger_use[2] = {
-    0,
-    0
-};
+bool controller_trigger_pressed[SDL_CONTROLLER_AXIS_MAX]{};
 
 // Mouse button to key mappings
 // Added by ScottD for Singe
@@ -887,16 +884,17 @@ void process_controller_motion(SDL_Event *event)
 
     // Deal with AXIS TRIGGERS
     for (int i = 0; i < SWITCH_COUNT; i++) {
-
-        if (event->caxis.axis == joystick_buttons_map[i][1]-AXIS_TRIGGER) {
-
-            if ((abs(event->caxis.value) > JOY_AXIS_TRIG)
-			    && i != controller_trigger_use[event->caxis.axis]) {
-                input_enable(i, NOMOUSE);
-                controller_trigger_use[event->caxis.axis] = i;
+        if (event->caxis.axis == joystick_buttons_map[i][1] - AXIS_TRIGGER) {
+            if (abs(event->caxis.value) > JOY_AXIS_TRIG) {
+               if (!controller_trigger_pressed[event->caxis.axis]) {
+                    input_enable(i, NOMOUSE);
+                    controller_trigger_pressed[event->caxis.axis] = true;
+               }
             } else {
-                input_disable(controller_trigger_use[event->caxis.axis], NOMOUSE);
-                controller_trigger_use[event->caxis.axis] = 0;
+               if (controller_trigger_pressed[event->caxis.axis]) {
+                    input_disable(i, NOMOUSE);
+                    controller_trigger_pressed[event->caxis.axis] = false;
+               }
             }
             return;
         }
