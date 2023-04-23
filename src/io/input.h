@@ -23,6 +23,9 @@
 #ifndef INPUT_H
 #define INPUT_H
 
+#include <string>
+#include <SDL.h>
+
 enum {
     SWITCH_UP,
     SWITCH_LEFT,
@@ -55,8 +58,6 @@ enum {
 
 ///////////////////////
 
-#include <SDL.h>
-
 // to be passed into the coin queue
 struct coin_input {
     bool coin_enabled;            //	whether the coin was enabled or disabled
@@ -77,7 +78,7 @@ typedef struct
     int relx;
     int rely;
     SDL_Color color;
-    char name[64];
+    std::string name;
     Uint32 buttons;
     Uint32 scrolluptick;
     Uint32 scrolldowntick;

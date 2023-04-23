@@ -182,146 +182,153 @@ int mouse_buttons_map[6] = {
 void CFG_Keys()
 {
     struct mpo_io *io;
-    string cur_line = "";
-    string key_name = "", sval1 = "", sval2 = "", sval3 = "", sval4 = "", eq_sign = "";
+    string key_name, sval1, sval2, sval3, sval4, eq_sign;
     int val1 = 0, val2 = 0, val3 = 0, val4 = 0;
     bool warn = true;
 
     if (m_altInputFileSet) {
-       string keyinput_notice = "Loading alternate keymap file: ";
-       keyinput_notice += g_inputini_file.c_str();
-       LOGI << keyinput_notice.c_str();
+        LOGI << "Loading alternate keymap file: " << g_inputini_file;
     }
 
-    // find where the keymap ini file is (if the file doesn't exist, this string will be empty)
-    string strDapInput = g_homedir.find_file(g_inputini_file.c_str(), true);
+    // find where the keymap ini file is (if the file doesn't exist, this string
+    // will be empty)
+    string strDapInput = g_homedir.find_file(g_inputini_file, true);
+
     io = mpo_open(strDapInput.c_str(), MPO_OPEN_READONLY);
-    if (io) {
-        LOGD << "Remapping input ...";
+    if (!io) {
+        LOGW << fmt("%s not found, using defaults", g_inputini_file.c_str());
+        return;
+    }
 
-        cur_line = "";
+    LOGD << "Remapping input ...";
 
-        // read lines until we find the keyboard header or we hit EOF
-        while (strcasecmp(cur_line.c_str(), "[KEYBOARD]") != 0) {
-            read_line(io, cur_line);
-            if (io->eof) {
-                LOGW <<
-                    "CFG_Keys() : never found [KEYBOARD] header, aborting";
-                break;
+    string cur_line;
+
+    // read lines until we find the keyboard header or we hit EOF
+    while (strcasecmp(cur_line.c_str(), "[KEYBOARD]") != 0) {
+        read_line(io, cur_line);
+        if (io->eof) {
+            LOGW << "CFG_Keys() : never found [KEYBOARD] header, aborting";
+            break;
+        }
+    }
+
+    constexpr std::string_view error_msg =
+        "Input remapping file was not in proper format, so we are aborting.";
+
+    // go until we hit EOF, or we break inside this loop (which is the
+    // expected behavior)
+    while (!io->eof) {
+        // skip blank line
+        if (read_line(io, cur_line) == 0) {
+            continue;
+        }
+
+        // if we are able to read in the key name
+        if (!find_word(cur_line.c_str(), key_name, cur_line)) {
+            LOGW << error_msg;
+            break;
+        }
+
+        if (strcasecmp(key_name.c_str(), "END") == 0)
+            break; // if we hit the 'END' keyword, we're done
+
+        // equals sign
+        if (!find_word(cur_line.c_str(), eq_sign, cur_line) || (eq_sign != "=")) {
+            LOGW << "Expected an '=' sign, didn't find it";
+            LOGW << error_msg;
+            break;
+        }
+
+        if (!find_word(cur_line.c_str(), sval1, cur_line)) {
+            LOGW << "Expected 3 integers, found none";
+            LOGW << error_msg;
+            break;
+        }
+
+        if (!find_word(cur_line.c_str(), sval2, cur_line)) {
+            LOGW << "Expected 3 integers, only found 1";
+            LOGW << error_msg;
+            break;
+        }
+
+        if (!find_word(cur_line.c_str(), sval3, cur_line)) {
+            LOGW << "Expected 3 integers, only found 2";
+            LOGW << error_msg;
+            break;
+        }
+
+        val1 = isdigit(sval1[0]) ? atoi(sval1.c_str()) : sdl2_keycode(sval1.c_str());
+        val2 = isdigit(sval2[0]) ? atoi(sval2.c_str()) : sdl2_keycode(sval2.c_str());
+
+        if (g_use_gamepad) {
+            val3 = isdigit(sval3[0]) ? atoi(sval3.c_str()) : sdl2_controller_button(sval3.c_str());
+        } else {
+            if (!isdigit(sval3[0]) && warn) {
+                LOGW << "Found a button config string: " << sval3;
+                LOGW << "Did you intend to use the '-gamepad' argument?";
+                warn = false;
+            }
+            val3 = atoi(sval3.c_str());
+        }
+
+        val4 = 0;
+        if (find_word(cur_line.c_str(), sval4, cur_line)) {
+            if (g_use_gamepad) {
+                val4 = sdl2_controller_axis(sval4.c_str());
+            } else {
+                val4 = atoi(sval4.c_str());
             }
         }
 
-        // go until we hit EOF, or we break inside this loop (which is the
-        // expected behavior)
-        while (!io->eof) {
-            // if we read in something besides a blank line
-            if (read_line(io, cur_line) > 0) {
-                bool corrupt_file = true; // we use this to avoid doing multiple
-                                          // if/else/break statements
+        bool found_match = false;
+        for (int i = 0; i < SWITCH_COUNT; i++) {
+            // skip unmatched key name.
+            if (strcasecmp(key_name.c_str(), g_key_names[i]) != 0) {
+                continue;
+            }
 
-                // if we are able to read in the key name
-                if (find_word(cur_line.c_str(), key_name, cur_line)) {
-                    if (strcasecmp(key_name.c_str(), "END") == 0)
-                        break; // if we hit the 'END' keyword, we're done
+            g_key_defs[i][0] = val1;
+            g_key_defs[i][1] = val2;
 
-                    // equals sign
-                    if (find_word(cur_line.c_str(), eq_sign, cur_line) && (eq_sign == "=")) {
-                        if (find_word(cur_line.c_str(), sval1, cur_line)) {
-                            if (find_word(cur_line.c_str(), sval2, cur_line)) {
-                                if (find_word(cur_line.c_str(), sval3, cur_line)) {
-                                    if (isdigit(sval1[0])) val1 = atoi(sval1.c_str());
-                                    else val1 = sdl2_keycode(sval1.c_str());
-                                    if (isdigit(sval2[0])) val2 = atoi(sval2.c_str());
-                                    else val2 = sdl2_keycode(sval2.c_str());
-                                    if (g_use_gamepad) {
-                                        if (isdigit(sval3[0])) val3 = atoi(sval3.c_str());
-                                        else val3 = sdl2_controller_button(sval3.c_str());
-                                    } else {
-                                        if (!isdigit(sval3[0]) && warn) {
-                                            LOGW << "Found a button config string: " << sval3.c_str();
-                                            LOGW << "Did you intend to use the '-gamepad' argument?";
-                                            warn = false;
-                                        }
-                                        val3 = atoi(sval3.c_str());
-                                    }
-                                    val4 = 0;
-                                    if (find_word(cur_line.c_str(), sval4, cur_line)) {
-                                        if (g_use_gamepad) {
-                                            val4 = sdl2_controller_axis(sval4.c_str());
-                                        } else {
-                                            val4 = atoi(sval4.c_str());
-                                        }
-                                    }
-                                    corrupt_file = false; // looks like we're good
-
-                                    bool found_match = false;
-                                    for (int i = 0; i < SWITCH_COUNT; i++) {
-                                        // if we can match up a key name (see
-                                        // list above) ...
-                                        if (strcasecmp(key_name.c_str(),
-                                                       g_key_names[i]) == 0) {
-                                            g_key_defs[i][0] = val1;
-                                            g_key_defs[i][1] = val2;
-
-                                            // if zero then no mapping
-                                            // necessary, just use default, if any
-                                            if (val3 > 0) {
-                                                if (val3 > AXIS_TRIGGER) {
-                                                    joystick_buttons_map[i][0] = (val3 / AXIS_TRIGGER);
-                                                    joystick_buttons_map[i][1] = val3;
-                                                } else {
-                                                    // first digit=joystick index, remaining digits=button index
-                                                    int divider = (sval3.length() == 4) ? 1000 : 100;
-                                                    joystick_buttons_map[i][0] = (val3 / divider);
-                                                    joystick_buttons_map[i][1] = (val3 % divider);
-                                                }
-                                            }
-                                            // joystick axis
-                                            if (val4 != 0) {
-                                                // first digit=joystick index, remaining digits=axis index, sign=direction
-                                                int divider = (sval4.length() > 4) ? 1000 : 100;
-                                                joystick_axis_map[i][0] = abs(val4 / divider);
-                                                joystick_axis_map[i][1] = abs(val4 % divider);
-                                                joystick_axis_map[i][2] = (val4 == 0)?0:((val4 < 0)?-1:1);
-                                            }
-
-                                            found_match = true;
-                                            break;
-                                        }
-                                    }
-
-                                    // if the key line was unknown
-                                    if (!found_match) {
-                                        cur_line = "Unrecognized key name " +
-                                                   key_name;
-                                        LOGW << cur_line;
-                                        corrupt_file = true;
-                                    }
-
-                                } else
-                                    LOGW << "Expected 3 integers, only found 2";
-                            } else
-                                LOGW << "Expected 3 integers, only found 1";
-                        } else
-                            LOGW << "Expected 3 integers, found none";
-                    } // end equals sign
-                    else
-                        LOGW << "Expected an '=' sign, didn't find it";
-                } // end if we found key_name
-                else
-                    LOGW << "Weird unexpected error happened"; // this really shouldn't ever happen
-
-                if (corrupt_file) {
-                    LOGW << "input remapping file was not in proper format, so we are aborting";
-                    break;
+            // if zero then no mapping necessary, just use default, if any
+            if (val3 > 0) {
+                if (val3 > AXIS_TRIGGER) {
+                    joystick_buttons_map[i][0] = (val3 / AXIS_TRIGGER);
+                    joystick_buttons_map[i][1] = val3;
+                } else {
+                    // first digit=joystick
+                    // index, remaining
+                    // digits=button index
+                    int divider = (sval3.length() == 4) ? 1000 : 100;
+                    joystick_buttons_map[i][0] = (val3 / divider);
+                    joystick_buttons_map[i][1] = (val3 % divider);
                 }
-            } // end if we didn't find a blank line
-              // else it's a blank line so we just ignore it
-        }     // end while not EOF
+            }
+            // joystick axis
+            if (val4 != 0) {
+                // first digit=joystick index,
+                // remaining digits=axis index,
+                // sign=direction
+                int divider             = (sval4.length() > 4) ? 1000 : 100;
+                joystick_axis_map[i][0] = abs(val4) / divider;
+                joystick_axis_map[i][1] = abs(val4) % divider;
+                joystick_axis_map[i][2] = val4 < 0 ? -1 : 1;
+            }
 
-        mpo_close(io);
-    } else // end if file was opened successfully
-        LOGW << fmt("%s not found, using defaults", g_inputini_file.c_str());
+            found_match = true;
+            break;
+        }
+
+        // if the key line was unknown
+        if (!found_match) {
+            LOGW << "Unrecognized key name: " << key_name;
+            LOGW << error_msg;
+            break;
+        }
+    }     // end while not EOF
+
+    mpo_close(io);
 }
 
 static void manymouse_init_mice(void)
@@ -337,28 +344,21 @@ static void manymouse_init_mice(void)
 
     if (available_mice <= 0) {
         LOGW << "No mice detected!";
+        return;
     }
-    else
-    {
-        int i;
-        if (available_mice == 1) {
-            LOGI << "Only 1 mouse found.";
-        }
-        else
-        {
-            LOGI << fmt("Found %d mice devices:", available_mice);
-        }
 
-        for (i = 0; i < available_mice; i++)
-        {
-            const char *name = ManyMouse_DeviceName(i);
-            strncpy(mice[i].name, name, sizeof (mice[i].name));
-            mice[i].name[sizeof (mice[i].name) - 1] = '\0';
-            mice[i].connected = 1;
-            LOGI << fmt("#%d: %s", i, mice[i].name);
-        }
-        SDL_SetWindowGrab(video::get_window(), SDL_TRUE);
+    if (available_mice == 1) {
+        LOGI << "Only 1 mouse found.";
+    } else {
+        LOGI << fmt("Found %d mice devices:", available_mice);
     }
+
+    for (int i = 0; i < available_mice; i++) {
+        mice[i].name = ManyMouse_DeviceName(i);
+        mice[i].connected = 1;
+        LOGI << fmt("#%d: %s", i, mice[i].name.c_str());
+    }
+    SDL_SetWindowGrab(video::get_window(), SDL_TRUE);
 }
 
 static void manymouse_update_mice()
@@ -592,7 +592,6 @@ int SDL_input_shutdown(void)
 // checks to see if there is incoming input, and acts on it
 void SDL_check_input()
 {
-
     SDL_Event event;
 
     while ((SDL_PollEvent(&event)) && (!get_quitflag())) {
@@ -603,32 +602,32 @@ void SDL_check_input()
     if (get_idleexit() > 0 && elapsed_ms_time(idle_timer) > get_idleexit())
         set_quitflag();
 
-    // if the coin queue has something entered into it
-    if (!g_coin_queue.empty()) {
-        struct coin_input coin = g_coin_queue.front(); // examine the next
-                                                       // element in the queue
-                                                       // to be considered
-
-        // NOTE : when cpu timers are flushed, the coin queue is automatically
-        // "reshuffled"
-        // so it is safe not to check to see whether the cpu timers were flushed
-        // here
-
-        // if it's safe to activate the coin
-        if (cpu::get_total_cycles_executed(0) > coin.cycles_when_to_enable) {
-            // if we're supposed to enable this coin
-            if (coin.coin_enabled) {
-                g_game->input_enable(coin.coin_val, NOMOUSE);
-            }
-            // else we are supposed to disable this coin
-            else {
-                g_game->input_disable(coin.coin_val, NOMOUSE);
-            }
-            g_coin_queue.pop(); // remove coin entry from queue
-        }
-        // else it's not safe to activate the coin, so we just wait
+    if (g_coin_queue.empty()) {
+        return;
     }
-    // else the coin queue is empty, so we needn't do anything ...
+
+    const coin_input& coin = g_coin_queue.front(); // examine the next
+                                                   // element in the queue
+                                                   // to be considered
+
+    // NOTE : when cpu timers are flushed, the coin queue is automatically
+    // "reshuffled"
+    // so it is safe not to check to see whether the cpu timers were flushed
+    // here
+
+    // if it's safe to activate the coin
+    if (cpu::get_total_cycles_executed(0) > coin.cycles_when_to_enable) {
+        // if we're supposed to enable this coin
+        if (coin.coin_enabled) {
+            g_game->input_enable(coin.coin_val, NOMOUSE);
+        }
+        // else we are supposed to disable this coin
+        else {
+            g_game->input_disable(coin.coin_val, NOMOUSE);
+        }
+        g_coin_queue.pop(); // remove coin entry from queue
+    }
+    // else it's not safe to activate the coin, so we just wait
 }
 
 // processes incoming input
@@ -977,7 +976,6 @@ void process_joystick_motion(SDL_Event *event)
 // processes movement of the joystick hat
 void process_joystick_hat_motion(SDL_Event *event)
 {
-
     static Uint8 prev_hat_position = SDL_HAT_CENTERED;
 
     if ((event->jhat.value & SDL_HAT_UP) && !(prev_hat_position & SDL_HAT_UP)) {
@@ -1139,37 +1137,33 @@ void set_use_gamepad(bool value) {
 
 bool set_mouse_mode(int thisMode)
 {
-   bool result = false;
+   if (!g_game->get_mouse_enabled()) return false;
 
-   if (g_game->get_mouse_enabled())
-   {
-       if (g_mouse_mode == MANY_MOUSE) ManyMouse_Quit();
+   if (g_mouse_mode == MANY_MOUSE) ManyMouse_Quit();
 
-       memset(mouse_buttons_map, 0, sizeof(mouse_buttons_map));
+   memset(mouse_buttons_map, 0, sizeof(mouse_buttons_map));
 
-       if (thisMode == SDL_MOUSE) {
-
-           mouse_buttons_map[0] = SWITCH_BUTTON1;  // 0 (Left Button)
-           mouse_buttons_map[1] = SWITCH_BUTTON3;  // 1 (Middle Button)
-           mouse_buttons_map[2] = SWITCH_BUTTON2;  // 2 (Right Button)
-           mouse_buttons_map[3] = SWITCH_BUTTON1;  // 3 (Wheel Up)
-           mouse_buttons_map[4] = SWITCH_BUTTON2;  // 4 (Wheel Down)
-           mouse_buttons_map[5] = SWITCH_MOUSE_DISCONNECT;
-           result = true;
-       }
-       else if (thisMode == MANY_MOUSE)
-       {
-           mouse_buttons_map[0] = SWITCH_BUTTON3;  // 0 (Left Button)
-           mouse_buttons_map[1] = SWITCH_BUTTON1;  // 1 (Middle Button)
-           mouse_buttons_map[2] = SWITCH_BUTTON2;  // 2 (Right Button)
-           mouse_buttons_map[3] = SWITCH_MOUSE_SCROLL_UP;  // 3 (Wheel Up)
-           mouse_buttons_map[4] = SWITCH_MOUSE_SCROLL_DOWN;  // 4 (Wheel Down)
-           mouse_buttons_map[5] = SWITCH_MOUSE_DISCONNECT;
-
-           manymouse_init_mice();
-           result = true;
-
-       }
+   if (thisMode == SDL_MOUSE) {
+        mouse_buttons_map[0] = SWITCH_BUTTON1; // 0 (Left Button)
+        mouse_buttons_map[1] = SWITCH_BUTTON3; // 1 (Middle Button)
+        mouse_buttons_map[2] = SWITCH_BUTTON2; // 2 (Right Button)
+        mouse_buttons_map[3] = SWITCH_BUTTON1; // 3 (Wheel Up)
+        mouse_buttons_map[4] = SWITCH_BUTTON2; // 4 (Wheel Down)
+        mouse_buttons_map[5] = SWITCH_MOUSE_DISCONNECT;
+        return true;
    }
-   return result;
+
+   if (thisMode == MANY_MOUSE) {
+        mouse_buttons_map[0] = SWITCH_BUTTON3;           // 0 (Left Button)
+        mouse_buttons_map[1] = SWITCH_BUTTON1;           // 1 (Middle Button)
+        mouse_buttons_map[2] = SWITCH_BUTTON2;           // 2 (Right Button)
+        mouse_buttons_map[3] = SWITCH_MOUSE_SCROLL_UP;   // 3 (Wheel Up)
+        mouse_buttons_map[4] = SWITCH_MOUSE_SCROLL_DOWN; // 4 (Wheel Down)
+        mouse_buttons_map[5] = SWITCH_MOUSE_DISCONNECT;
+
+        manymouse_init_mice();
+        return true;
+   }
+
+   return false;
 }
