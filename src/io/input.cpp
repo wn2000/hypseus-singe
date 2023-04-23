@@ -178,11 +178,6 @@ int mouse_buttons_map[6] = {
 
 void CFG_Keys()
 {
-    struct mpo_io *io;
-    string key_name, sval1, sval2, sval3, sval4, eq_sign;
-    int val1 = 0, val2 = 0, val3 = 0, val4 = 0;
-    bool warn = true;
-
     if (m_altInputFileSet) {
         LOGI << "Loading alternate keymap file: " << g_inputini_file;
     }
@@ -191,7 +186,7 @@ void CFG_Keys()
     // will be empty)
     string strDapInput = g_homedir.find_file(g_inputini_file, true);
 
-    io = mpo_open(strDapInput.c_str(), MPO_OPEN_READONLY);
+    mpo_io *io = mpo_open(strDapInput.c_str(), MPO_OPEN_READONLY);
     if (!io) {
         LOGW << fmt("%s not found, using defaults", g_inputini_file.c_str());
         return;
@@ -215,6 +210,7 @@ void CFG_Keys()
 
     // go until we hit EOF, or we break inside this loop (which is the
     // expected behavior)
+    bool warn = true;
     while (!io->eof) {
         // skip blank line
         if (read_line(io, cur_line) == 0) {
@@ -222,6 +218,7 @@ void CFG_Keys()
         }
 
         // if we are able to read in the key name
+        string key_name;
         if (!find_word(cur_line.c_str(), key_name, cur_line)) {
             LOGW << error_msg;
             break;
@@ -231,33 +228,38 @@ void CFG_Keys()
             break; // if we hit the 'END' keyword, we're done
 
         // equals sign
+        string eq_sign;
         if (!find_word(cur_line.c_str(), eq_sign, cur_line) || (eq_sign != "=")) {
             LOGW << "Expected an '=' sign, didn't find it";
             LOGW << error_msg;
             break;
         }
 
+        string sval1;
         if (!find_word(cur_line.c_str(), sval1, cur_line)) {
             LOGW << "Expected 3 integers, found none";
             LOGW << error_msg;
             break;
         }
 
+        string sval2;
         if (!find_word(cur_line.c_str(), sval2, cur_line)) {
             LOGW << "Expected 3 integers, only found 1";
             LOGW << error_msg;
             break;
         }
 
+        string sval3;
         if (!find_word(cur_line.c_str(), sval3, cur_line)) {
             LOGW << "Expected 3 integers, only found 2";
             LOGW << error_msg;
             break;
         }
 
-        val1 = isdigit(sval1[0]) ? atoi(sval1.c_str()) : sdl2_keycode(sval1.c_str());
-        val2 = isdigit(sval2[0]) ? atoi(sval2.c_str()) : sdl2_keycode(sval2.c_str());
+        int val1 = isdigit(sval1[0]) ? atoi(sval1.c_str()) : sdl2_keycode(sval1.c_str());
+        int val2 = isdigit(sval2[0]) ? atoi(sval2.c_str()) : sdl2_keycode(sval2.c_str());
 
+        int val3 = 0;
         if (g_use_gamepad) {
             val3 = isdigit(sval3[0]) ? atoi(sval3.c_str()) : sdl2_controller_button(sval3.c_str());
         } else {
@@ -269,7 +271,8 @@ void CFG_Keys()
             val3 = atoi(sval3.c_str());
         }
 
-        val4 = 0;
+        int val4 = 0;
+        string sval4;
         if (find_word(cur_line.c_str(), sval4, cur_line)) {
             if (g_use_gamepad) {
                 val4 = sdl2_controller_axis(sval4.c_str());
@@ -439,124 +442,104 @@ static void manymouse_update_mice()
     }
 }
 
-int SDL_input_init()
 // initializes the keyboard (and joystick if one is present)
 // returns 1 if successful, 0 on error
 // NOTE: Video has to be initialized BEFORE this is or else it won't work
+int SDL_input_init()
 {
-
-    int result = 0;
-
     // make sure the coin queue is empty (it should be, this is just a safety
     // check)
-    while (!g_coin_queue.empty()) {
-        g_coin_queue.pop();
-    }
-    g_sticky_coin_cycles =
-        (Uint32)(STICKY_COIN_SECONDS * cpu::get_hz(0)); // only needs to be
-                                                       // calculated once
+    while (!g_coin_queue.empty()) { g_coin_queue.pop(); }
+
+    // only needs to be calculated once
+    g_sticky_coin_cycles = (Uint32)(STICKY_COIN_SECONDS * cpu::get_hz(0));
+
     if (g_use_gamepad) {
+        if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER)) {
+            LOGE << "GamePad initialization failed: " << SDL_GetError();
+            return 0;
+        }
 
-        if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) >= 0) {
-
-            string strGCdb = g_homedir.find_file("gamecontrollerdb.txt", true);
-
-            int n = strGCdb.length();
-            char dbfile[n+1];
-            strcpy(dbfile, strGCdb.c_str());
-            if (mpo_file_exists(dbfile)) {
-                LOGI << "Found a gamecontrollerdb.txt";
-                if (SDL_GameControllerAddMappingsFromFile(dbfile) < 0) {
-                    LOGW << "Loading gamecontrollerdb.txt failed";
-                }
+        string strGCdb = g_homedir.find_file("gamecontrollerdb.txt", true);
+        if (mpo_file_exists(strGCdb.c_str())) {
+            LOGI << "Found " << strGCdb;
+            if (SDL_GameControllerAddMappingsFromFile(strGCdb.c_str()) < 0) {
+                LOGW << "Loading gamecontrollerdb.txt failed: " << SDL_GetError();
             }
+        }
 
-            SDL_gamepad_init();
-            result = 1;
-
-        } else
-            LOGW << "GamePad initialization failed!";
-
+        SDL_gamepad_init();
     } else {
-
-        if (SDL_InitSubSystem(SDL_INIT_JOYSTICK) >= 0) {
-            // if joystick usage is enabled
-            if (g_use_joystick) {
-                // open joysticks
-                for (int i=0; i < SDL_NumJoysticks(); i++) {
-                    SDL_Joystick* joystick = SDL_JoystickOpen(i);
-                    if (joystick != NULL) {
-                        LOGD << "Joystick #" << i << " was successfully opened";
-                    } else {
-                        LOGW << "Error opening joystick #" << i << "!";
-                    }
-                }
-                if (SDL_NumJoysticks() == 0) {
-                    LOGI << "No joysticks detected";
-                }
-            }
-            // notify user that their attempt to disable the joystick is successful
-            else {
-                LOGI << "Joystick usage disabled";
+        // if joystick usage is enabled
+        if (g_use_joystick) {
+            if (SDL_InitSubSystem(SDL_INIT_JOYSTICK)) {
+                LOGE << "Joystick initialization failed: " << SDL_GetError();
+                return 0;
             }
 
-            CFG_Keys(); // NOTE : for some freak reason, this should not be done
-                        // BEFORE the joystick is initialized, I don't know why!
-            result = 1;
-        } else {
-            LOGW << "Input initialization failed!";
+            // open joysticks
+            for (int i = 0; i < SDL_NumJoysticks(); i++) {
+                SDL_Joystick *joystick = SDL_JoystickOpen(i);
+                if (joystick != NULL) {
+                    LOGD << "Joystick #" << i << " was successfully opened";
+                } else {
+                    LOGW << "Error opening joystick #" << i << "!";
+                }
+            }
+            if (SDL_NumJoysticks() == 0) { LOGI << "No joysticks detected"; }
+        }
+        // notify user that their attempt to disable the joystick is
+        // successful
+        else {
+            LOGI << "Joystick usage disabled";
         }
     }
+
+    CFG_Keys(); // NOTE : for some freak reason, this should not be done
+                // BEFORE the joystick is initialized, I don't know why!
 
     idle_timer = refresh_ms_time(); // added by JFA for -idleexit
 
     // if the mouse is disabled, then filter mouse events out ...
-    if (!g_game->get_mouse_enabled())
-    {
-         FilterMouseEvents(true);
-    }
-    else
-    {
-         FilterMouseEvents(false);
+    if (!g_game->get_mouse_enabled()) {
+        FilterMouseEvents(true);
+    } else {
+        FilterMouseEvents(false);
 
-         if (g_game->get_manymouse())
-             g_mouse_mode = MANY_MOUSE;
+        if (g_game->get_manymouse()) g_mouse_mode = MANY_MOUSE;
 
-         if (!set_mouse_mode(g_mouse_mode)) {
-             LOGE << "Mouse initialization failed";
-             set_quitflag();
-         }
+        if (!set_mouse_mode(g_mouse_mode)) {
+            LOGE << "Mouse initialization failed";
+            set_quitflag();
+        }
     }
 
-    return (result);
+    return 1;
 }
 
 void SDL_gamepad_init()
 {
-    static bool padcfg = false;
-
-    // Only use first controller found
-    for (int i=0; i < SDL_NumJoysticks(); i++) {
-         if (SDL_IsGameController(i)) {
-             SDL_GameController *gamepad = SDL_GameControllerOpen(i);
-             SDL_Joystick* joy = SDL_GameControllerGetJoystick(gamepad);
-             if (joy != NULL) {
-
-                 LOGI << "Gamepad #" << i << ": "
-			 << SDL_GameControllerName(gamepad) << " connected";
-                 g_gamepad_id = gamepad;
-
-                 if (!padcfg) {
-                     SDL_JoystickEventState(SDL_ENABLE);
-                     SDL_GameControllerEventState(SDL_ENABLE);
-                     padcfg = true;
-                     CFG_Keys();
-                 }
-                 break;
-            }
+    for (int i = 0; i < SDL_NumJoysticks(); i++) {
+        if (!SDL_IsGameController(i)) {
+            continue;
         }
+
+        SDL_GameController *gamepad = SDL_GameControllerOpen(i);
+        if (!gamepad) {
+            LOGE << fmt("Error opening game controller #%d: %s", i, SDL_GetError());
+            continue;
+        }
+
+        LOGI << "Gamepad #" << i << ": " << SDL_GameControllerName(gamepad) << " connected";
+
+        if (g_gamepad_id) {
+            SDL_GameControllerClose(g_gamepad_id);
+        }
+        g_gamepad_id = gamepad;
+
+        // Only use first controller found
+        break;
     }
-    return;
 }
 
 void FilterMouseEvents(bool bFilteredOut)
@@ -573,17 +556,16 @@ void FilterMouseEvents(bool bFilteredOut)
 }
 
 // does any shutting down necessary
-// 1 = success, 0 = failure
-int SDL_input_shutdown(void)
+void SDL_input_shutdown(void)
 {
     if (g_use_gamepad) {
-        if (g_gamepad_id)
+        if (g_gamepad_id) {
             SDL_GameControllerClose(g_gamepad_id);
+            g_gamepad_id = nullptr;
+        }
         SDL_QuitSubSystem(SDL_INIT_GAMECONTROLLER);
     } else
         SDL_QuitSubSystem(SDL_INIT_JOYSTICK);
-
-    return (1);
 }
 
 // checks to see if there is incoming input, and acts on it
@@ -630,8 +612,6 @@ void SDL_check_input()
 // processes incoming input
 void process_event(SDL_Event *event)
 {
-    unsigned int i = 0;
-
     // by RDG2010
     // make things easier to read...
     SDL_Keycode keyPressed = event->key.keysym.sym;
@@ -707,10 +687,11 @@ void process_event(SDL_Event *event)
 
         break;
     case SDL_CONTROLLERDEVICEREMOVED:
-        if (g_gamepad_id) {
+        if (event->cdevice.which ==
+            SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(g_gamepad_id))) {
             LOGI << "GamePad '" << SDL_GameControllerName(g_gamepad_id) << "' disconnected";
             SDL_GameControllerClose(g_gamepad_id);
-            g_gamepad_id = NULL;
+            g_gamepad_id = nullptr;
         }
         break;
     case SDL_CONTROLLERDEVICEADDED:
@@ -725,6 +706,7 @@ void process_event(SDL_Event *event)
         process_joystick_motion(event);
         break;
     case SDL_JOYHATMOTION:
+        if (g_use_gamepad) break;
         // only process events for the first hat
         if (event->jhat.hat == 0) {
             reset_idle();
@@ -736,7 +718,7 @@ void process_event(SDL_Event *event)
         reset_idle(); // added by JFA for -idleexit
 
         // loop through map and find corresponding action
-        for (i = 0; i < SWITCH_COUNT; i++) {
+        for (int i = 0; i < SWITCH_COUNT; i++) {
             if (event->jbutton.which == joystick_buttons_map[i][0]
                             && event->jbutton.button == joystick_buttons_map[i][1]-1) {
                 if (i == SWITCH_COIN1) hotkey = true;
@@ -749,7 +731,7 @@ void process_event(SDL_Event *event)
     case SDL_CONTROLLERBUTTONDOWN:
         reset_idle(); // added by JFA for -idleexit
         // loop through map and find corresponding action
-        for (i = 0; i < SWITCH_COUNT; i++) {
+        for (int i = 0; i < SWITCH_COUNT; i++) {
             if (event->cbutton.button == joystick_buttons_map[i][1]-1) {
                 if (i == SWITCH_COIN1) hotkey = true;
                 input_enable(i, NOMOUSE);
@@ -764,7 +746,7 @@ void process_event(SDL_Event *event)
         hotkey = false;
 
         // loop through map and find corresponding action
-        for (i = 0; i < SWITCH_COUNT; i++) {
+        for (int i = 0; i < SWITCH_COUNT; i++) {
             if (event->jbutton.which == joystick_buttons_map[i][0]
                            && event->jbutton.button == joystick_buttons_map[i][1]-1) {
                 input_disable(i, NOMOUSE);
@@ -778,7 +760,7 @@ void process_event(SDL_Event *event)
         hotkey = false;
 
         // loop through map and find corresponding action
-        for (i = 0; i < SWITCH_COUNT; i++) {
+        for (int i = 0; i < SWITCH_COUNT; i++) {
             if (event->cbutton.button == joystick_buttons_map[i][1]-1) {
                 input_disable(i, NOMOUSE);
                 break;
@@ -804,7 +786,7 @@ void process_event(SDL_Event *event)
 
            switch (event->type) {
            case SDL_MOUSEBUTTONDOWN:
-               for (i = 0; i < (sizeof(mouse_buttons_map) / sizeof(int)); i++) {
+               for (int i = 0; i < (sizeof(mouse_buttons_map) / sizeof(int)); i++) {
                     if (event->button.button == i) {
                         g_game->input_enable((Uint8)mouse_buttons_map[i], NOMOUSE);
                         break;
@@ -812,7 +794,7 @@ void process_event(SDL_Event *event)
                }
                break;
            case SDL_MOUSEBUTTONUP:
-               for (i = 0; i < (sizeof(mouse_buttons_map) / sizeof(int)); i++) {
+               for (int i = 0; i < (sizeof(mouse_buttons_map) / sizeof(int)); i++) {
                     if (event->button.button == i) {
                         g_game->input_disable((Uint8)mouse_buttons_map[i], NOMOUSE);
                         break;
