@@ -24,6 +24,8 @@ public:
     Map(&rect->x, &rect->y, &rect->w, &rect->h);
   }
 
+  std::pair<float, float> GetScales() const { return {m_trans_mat(0, 0), m_trans_mat(1, 1)}; }
+
 private:
   boost::numeric::ublas::c_matrix<float, 3, 3> m_trans_mat =
       boost::numeric::ublas::identity_matrix<float>(3);

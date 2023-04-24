@@ -20,10 +20,11 @@ public:
       Image(img, rect.x, rect.y, rect.w, rect.h);
   }
 
-  void Image(SDL_Texture *img, int src_x, int src_y, int src_w, int src_h, int dest_x, int dest_y, int dest_w, int dest_h);
+  void Image(SDL_Texture* img, int dest_x, int dest_y, int dest_w, int dest_h,
+             int src_x, int src_y, int src_w, int src_h);
   void Image(SDL_Texture *img, const SDL_Rect& src, const SDL_Rect& dest)
   {
-    Image(img, src.x, src.y, src.w, src.h, dest.x, dest.y, dest.w, dest.h);
+      Image(img, dest.x, dest.y, dest.w, dest.h, src.x, src.y, src.w, src.h);
   }
 
   void Image(SDL_Texture_Ptr img, int x, int y, int w, int h);

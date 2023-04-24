@@ -18,16 +18,21 @@ void DrawList::Image(SDL_Texture *texture, int x, int y, int w, int h)
     });
 }
 
-void DrawList::Image(SDL_Texture *texture, int dest_x, int dest_y, int dest_w, int dest_h, int src_x, int src_y, int src_w, int src_h)
+void DrawList::Image(SDL_Texture *texture, int dest_x, int dest_y, int dest_w, int dest_h,
+                     int src_x, int src_y, int src_w, int src_h)
 {
-    drawlist.push_back({
-        .operation = DrawOperation::IMAGE,
-        .image = {
-            texture,
-            dest_x, dest_y, dest_w, dest_h,
-            src_x, src_y, src_w, src_h,
-        }
-    });
+    drawlist.push_back({.operation = DrawOperation::IMAGE,
+                        .image     = {
+                            texture,
+                            dest_x,
+                            dest_y,
+                            dest_w,
+                            dest_h,
+                            src_x,
+                            src_y,
+                            src_w,
+                            src_h,
+                        }});
 }
 
 void DrawList::Image(SDL_Texture_Ptr texture, int x, int y, int w, int h)
@@ -175,7 +180,9 @@ void DrawList::Render(const Transform& trans) const
             int x = item.text.x;
             int y = item.text.y;
             trans.Map(&x, &y);
-            FC_Draw(video::get_font(), video::get_renderer(), x, y, item.str.c_str());
+            auto [scalex, scaley] = trans.GetScales();
+
+            FC_DrawScale(video::get_tt_font(), video::get_renderer(), x, y, {scalex, scaley}, item.str.c_str());
         }
         else if (item.operation == DrawOperation::RECTANGLE)
         {
