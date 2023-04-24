@@ -2,7 +2,7 @@
 #define OVERLAY_SCOREBOARD_H
 
 #include "scoreboard_interface.h"
-#include <SDL.h>	// for SDL_Surface
+#include "../video/overlay.h"
 
 class OverlayScoreboard : public IScoreboard
 {
@@ -27,9 +27,10 @@ private:
 
 	static IScoreboard *GetInstance(SDL_Surface *(*pFuncGetActiveOverlay)(), bool bThayers);
 
-	void update_player_score (SDL_Surface *pSurface, int player, int start_digit, unsigned int values[], int num_digits);
-	void update_player_lives (SDL_Surface *pSurface, int player, unsigned int lives);
-	void update_credits(SDL_Surface *pSurface);
+    void update_player_score(Overlay *overlay, int player, int start_digit,
+                             unsigned int values[], int num_digits) const;
+    void update_player_lives(Overlay *overlay, int player, unsigned int lives) const;
+    void update_credits(Overlay *overlay) const;
 
 	// callback function to get pointer to active video overlay surface
 	SDL_Surface *(*m_pFuncGetActiveOverlay)();

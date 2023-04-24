@@ -56,6 +56,7 @@ void ConvertSurface(SDL_Surface **surface, const SDL_PixelFormat *fmt)
 Overlay sb_overlay;
 Overlay aux_overlay;
 Overlay leds_overlay;
+Overlay score_lives_credit_leds_overlay;
 Overlay layout;
 
 Overlay *screen_overlay = nullptr;
@@ -517,6 +518,7 @@ bool init_display()
                                           Rmask, Gmask, Bmask, Amask);
 
     leds_overlay.SetSize(320, 240);
+    score_lives_credit_leds_overlay.SetSize(320, 240);
 
     // Convert the LEDs surface to the destination surface format for
     // faster blitting, and set it's color key to NOT copy 0x000000ff
@@ -854,8 +856,8 @@ bool draw_ranks()
 
 
 // Update scoreboard surface
-void draw_overlay_leds(unsigned int values[], int num_digits,
-                       int start_x, int y)
+void draw_overlay_leds(const unsigned int *values, int num_digits,
+                       int start_x, int y, Overlay *overlay)
 {
     SDL_Rect src, dest;
 
@@ -869,14 +871,14 @@ void draw_overlay_leds(unsigned int values[], int num_digits,
     src.h = OVERLAY_LED_HEIGHT;
 
     if (!g_scoreboard_needs_update) {
-        leds_overlay.GetDrawList().Clear();
+        // overlay->GetDrawList().Clear();
         g_scoreboard_needs_update = true;
     }
 
     for (int i = 0; i < num_digits; i++) {
         src.x = values[i] * OVERLAY_LED_WIDTH;
 
-        leds_overlay.GetDrawList().Image(g_other_bmps[B_OVERLAY_LEDS], src, dest);
+        overlay->GetDrawList().Image(g_other_bmps[B_OVERLAY_LEDS], src, dest);
         dest.x += OVERLAY_LED_WIDTH;
     }
 
@@ -954,9 +956,9 @@ void draw_charline_LDP1450(char *LDP1450_String, int start_x, int y)
     for (int i = 0; i < LDP1450_strlen; i++)
     {
          if (LDP1450_String[i] == 0x13)
-             LDP1450_String[i] = 0x5f;
+             LDP1450_String[i] = '_';
 
-         if (LDP1450_String[i] != 32) j++;
+         if (LDP1450_String[i] != ' ') j++;
     }
 
     if (j > 0) {
@@ -1013,10 +1015,10 @@ void draw_singleline_LDP1450(char *LDP1450_String, int start_x, int y)
     for (i = 0; i < LDP1450_strlen; i++) {
         char value = LDP1450_String[i];
 
-        if (value >= 0x26 && value <= 0x39) value -= 0x25;
-        else if (value >= 'A' && value <= 'Z') value -= 0x2a;
-        else if (value == 0x13) value = 0x32; // is this supposed to be 13 ('\r') and 32 (' ')?
-        else value = 0x31;
+        if (value >= '&' && value <= '9') value = value - '&' + 1;
+        else if (value >= 'A' && value <= 'Z') value = value - 'A' + 23;
+        else if (value == 0x13) value = 50; // a filled square character
+        else value = 49; // a blank character
 
         src.x = value * OVERLAY_LDP1450_WIDTH;
 
@@ -1086,7 +1088,9 @@ SDL_Renderer *get_renderer() { return g_renderer; }
 SDL_Texture *get_screen() { return g_overlay_texture; }
 SDL_Surface *get_screen_blitter() { return g_screen_blitter; }
 SDL_Texture *get_yuv_screen() { return g_yuv_texture; }
-SDL_Surface *get_screen_leds() { return g_leds_surface; }
+
+Overlay *get_screen_leds() { return &leds_overlay; }
+Overlay *get_score_lives_credit_leds() { return &score_lives_credit_leds_overlay; }
 
 FC_Font *get_font() { return g_font; }
 FC_Font *get_tt_font() { return g_ttfont_fc; }
@@ -1566,7 +1570,8 @@ void vid_blit () {
         }
     }
 
-    layout.GetDrawList().Image(&leds_overlay, video_rect);
+    // layout.GetDrawList().Image(&leds_overlay, video_rect);
+    layout.GetDrawList().Image(&score_lives_credit_leds_overlay, video_rect);
 
     layout.Render();
 
@@ -1590,10 +1595,10 @@ void vid_blit () {
     // }
 
     // If there's a subtitle overlay
-    if (g_bSubtitleShown) draw_subtitle(subchar, false);
+    // if (g_bSubtitleShown) draw_subtitle(subchar, false);
 
     // LDP1450 overlay
-    if (g_LDP1450_overlay) draw_LDP1450_overlay();
+    // if (g_LDP1450_overlay) draw_LDP1450_overlay();
 
     if (g_scanlines)
         draw_scanlines(g_viewport_width, g_viewport_height, s_shunt);

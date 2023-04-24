@@ -49,14 +49,11 @@ bool ScoreboardCollection::AddType(ScoreboardFactory::ScoreboardType type)
 	return bRes;
 }
 
-// this is used repeatedly
-#define LIST_LOOP for (list<IScoreboard *>::iterator li = m_lScoreboards.begin(); li != m_lScoreboards.end(); ++li)
-
 void ScoreboardCollection::DeleteInstance()
 {
-	LIST_LOOP
+	for (IScoreboard * li: m_lScoreboards)
 	{
-		(*li)->PreDeleteInstance();
+		li->PreDeleteInstance();
 	}
 	m_lScoreboards.clear();
 	delete this;
@@ -64,9 +61,9 @@ void ScoreboardCollection::DeleteInstance()
 
 void ScoreboardCollection::Invalidate()
 {
-	LIST_LOOP
+	for (IScoreboard * li: m_lScoreboards)
 	{
-		(*li)->Invalidate();
+		li->Invalidate();
 	}
 }
 
@@ -74,9 +71,9 @@ bool ScoreboardCollection::RepaintIfNeeded()
 {
 	bool bRes = false;
 
-	LIST_LOOP
+	for (IScoreboard * li: m_lScoreboards)
 	{
-		bRes = bRes || (*li)->RepaintIfNeeded();
+		bRes = bRes || li->RepaintIfNeeded();
 	}
 	return bRes;
 }
@@ -85,9 +82,9 @@ bool ScoreboardCollection::ChangeVisibility(bool bVisible)
 {
 	bool bRes = false;
 
-	LIST_LOOP
+	for (IScoreboard * li: m_lScoreboards)
 	{
-		bRes = bRes || (*li)->ChangeVisibility(bVisible);
+		bRes = bRes || li->ChangeVisibility(bVisible);
 	}
 	return bRes;
 }
@@ -96,10 +93,10 @@ bool ScoreboardCollection::is_repaint_needed()
 {
 	bool bRes = false;
 
-	LIST_LOOP
+	for (IScoreboard * li: m_lScoreboards)
 	{
 		// if any of the collection needs repaint, then return true
-		bRes = bRes || (*li)->is_repaint_needed();
+		bRes = bRes || li->is_repaint_needed();
 	}
 	return bRes;
 }
@@ -110,9 +107,9 @@ bool ScoreboardCollection::pre_set_digit(unsigned int uValue, WhichDigit which)
 
 	if (!m_lScoreboards.empty()) bRes = true;
 
-	LIST_LOOP
+	for (IScoreboard * li: m_lScoreboards)
 	{
-		bRes = bRes && (*li)->pre_set_digit(uValue, which);
+		bRes = bRes && li->pre_set_digit(uValue, which);
 	}
 	return bRes;
 }
@@ -123,9 +120,9 @@ bool ScoreboardCollection::pre_get_digit(unsigned int &uValue, WhichDigit which)
 
 	if (!m_lScoreboards.empty()) bRes = true;
 
-	LIST_LOOP
+	for (IScoreboard * li: m_lScoreboards)
 	{
-		bRes = bRes && (*li)->pre_get_digit(uValue, which);
+		bRes = bRes && li->pre_get_digit(uValue, which);
 	}
 	return bRes;
 }
