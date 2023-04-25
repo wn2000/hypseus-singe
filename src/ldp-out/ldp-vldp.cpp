@@ -71,10 +71,6 @@ unsigned int g_vertical_stretch = 0;
 // what type of filter to use on our data (if any)
 unsigned int g_filter_type = FILTER_NONE;
 
-// these are globals because they are used by our callback functions
-// used a lot, we only want to calculate once
-SDL_Rect *g_screen_clip_rect = NULL;
-
 // this will contain a blank YUV overlay suitable for search/seek blanking
 struct yuv_buf g_blank_yuv_buf;
 Uint8 *g_line_buf = NULL;  // temp sys RAM for doing calculations so we can do
@@ -1485,14 +1481,9 @@ void update_parse_meter(const string &strFilename)
         // always be >= elapsed_s, so no checking necessary here
         remaining_s = total_s - elapsed_s;
 
-        // the main screen that we can draw on ...
-        SDL_Surface *screen = video::get_screen_blitter();
-        SDL_Renderer *renderer = video::get_renderer();
-        // erase previous stuff on the screen blitter
-        SDL_FillRect(screen, NULL, 0);
-
         // if we have some progress to report ...
         if (remaining_s > 0) {
+            SDL_Renderer *renderer = video::get_renderer();
             int len;
             char s[160];
             char f[160];
@@ -1544,25 +1535,6 @@ void report_mpeg_dimensions_callback(int width, int height)
     // thread to do so before we continue ...
     while ((g_bGotParseUpdate) && (elapsed_ms_time(uTimer) < 3000)) {
         make_delay(1);
-    }
-
-    // used a lot, we only want to calculate it once
-    g_screen_clip_rect = &video::get_screen_blitter()->clip_rect;
-
-    // if draw width is less than the screen width
-    if (video::get_draw_width() < (unsigned int)g_screen_clip_rect->w) {
-        // center horizontally
-        unsigned int uDiff = g_screen_clip_rect->w - video::get_draw_width();
-        g_screen_clip_rect->x += (uDiff / 2);
-        g_screen_clip_rect->w = video::get_draw_width();
-    }
-
-    // if draw height is less than the screen height
-    if (video::get_draw_height() < (unsigned int)g_screen_clip_rect->h) {
-        // center vertically
-        unsigned int uDiff = g_screen_clip_rect->h - video::get_draw_height();
-        g_screen_clip_rect->y += (uDiff / 2);
-        g_screen_clip_rect->h = video::get_draw_height();
     }
 
     // create overlay, taking into account any letterbox removal we're doing
