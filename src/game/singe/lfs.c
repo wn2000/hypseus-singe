@@ -113,25 +113,27 @@ typedef struct dir_data {
 */
 static int change_dir (lua_State *L) {
 
-	const char *path = luaL_checkstring(L, 1);
-	char filepath[RETRO_MAXPATH];
-	int len = strlen(path) + RETRO_PAD;
+    const char *path = luaL_checkstring(L, 1);
+    char filepath[RETRO_MAXPATH];
+    int len = strlen(path) + RETRO_PAD;
 
-	if (len > RETRO_MAXPATH) len = RETRO_MAXPATH;
+    if (len > RETRO_MAXPATH) len = RETRO_MAXPATH;
 
-	if (get_retropath()) {
-	    lua_retropath(path, filepath, len);
-	} else memcpy(filepath, path, len);
+    if (get_retropath()) {
+        lua_retropath(path, filepath, len);
+    } else {
+        strncpy(filepath, path, len);
+    }
 
-	if (chdir(filepath)) {
-		lua_pushnil (L);
-		lua_pushfstring (L,"Unable to change working directory to '%s'\n%s\n",
-				filepath, chdir_error);
-		return 2;
-	} else {
-		lua_pushboolean (L, 1);
-		return 1;
-	}
+    if (chdir(filepath)) {
+        lua_pushnil(L);
+        lua_pushfstring(L, "Unable to change working directory to '%s'\n%s\n",
+                        filepath, chdir_error);
+        return 2;
+    } else {
+        lua_pushboolean(L, 1);
+        return 1;
+    }
 }
 
 /*
@@ -494,36 +496,38 @@ static int dir_close (lua_State *L) {
 ** Factory of directory iterators
 */
 static int dir_iter_factory (lua_State *L) {
-	const char *path = luaL_checkstring (L, 1);
-	char dirpath[RETRO_MAXPATH];
-	int len = strlen(path) + RETRO_PAD;
+    const char *path = luaL_checkstring(L, 1);
+    char dirpath[RETRO_MAXPATH];
+    int len = strlen(path) + RETRO_PAD;
 
-	if (len > RETRO_MAXPATH) len = RETRO_MAXPATH;
+    if (len > RETRO_MAXPATH) len = RETRO_MAXPATH;
 
-	if (get_retropath()) {
-	    lua_retropath(path, dirpath, len);
-	} else memcpy(dirpath, path, len);
+    if (get_retropath()) {
+        lua_retropath(path, dirpath, len);
+    } else {
+        strncpy(dirpath, path, len);
+    }
 
-	dir_data *d;
-	lua_pushcfunction (L, dir_iter);
-	d = (dir_data *) lua_newuserdata (L, sizeof(dir_data));
-	d->closed = 0;
+    dir_data *d;
+    lua_pushcfunction(L, dir_iter);
+    d = (dir_data *)lua_newuserdata(L, sizeof(dir_data));
+    d->closed = 0;
 #ifdef _WIN32
-	d->hFile = 0L;
-	luaL_getmetatable (L, DIR_METATABLE);
-	lua_setmetatable (L, -2);
-	if (strlen(dirpath) > MAX_DIR_LENGTH)
-		luaL_error (L, "path too long: %s", dirpath);
-	else
-		snprintf (d->pattern, MAX_DIR_LENGTH, "%s/*", dirpath);
+    d->hFile = 0L;
+    luaL_getmetatable(L, DIR_METATABLE);
+    lua_setmetatable(L, -2);
+    if (strlen(dirpath) > MAX_DIR_LENGTH)
+        luaL_error(L, "path too long: %s", dirpath);
+    else
+        snprintf(d->pattern, MAX_DIR_LENGTH, "%s/*", dirpath);
 #else
-	luaL_getmetatable (L, DIR_METATABLE);
-	lua_setmetatable (L, -2);
-	d->dir = opendir (dirpath);
-	if (d->dir == NULL)
-		luaL_error (L, "cannot open %s: %s", dirpath, strerror (errno));
+    luaL_getmetatable(L, DIR_METATABLE);
+    lua_setmetatable(L, -2);
+    d->dir = opendir(dirpath);
+    if (d->dir == NULL)
+        luaL_error(L, "cannot open %s: %s", dirpath, strerror(errno));
 #endif
-	return 2;
+    return 2;
 }
 
 
@@ -734,48 +738,51 @@ struct _stat_members members[] = {
 ** Get file or symbolic link information
 */
 static int _file_info_ (lua_State *L, int (*st)(const char*, STAT_STRUCT*)) {
-	int i;
-	STAT_STRUCT info;
-	const char *file = luaL_checkstring (L, 1);
-	char retrofile[RETRO_MAXPATH];
-	int len = strlen(file) + RETRO_PAD;
+    int i;
+    STAT_STRUCT info;
+    const char *file = luaL_checkstring(L, 1);
+    char retrofile[RETRO_MAXPATH];
+    int len = strlen(file) + RETRO_PAD;
 
-	if (len > RETRO_MAXPATH) len = RETRO_MAXPATH;
+    if (len > RETRO_MAXPATH) len = RETRO_MAXPATH;
 
-	if (get_retropath()) {
-	    lua_retropath(file, retrofile, len);
-	} else memcpy(retrofile, file, len);
+    if (get_retropath()) {
+        lua_retropath(file, retrofile, len);
+    } else {
+        strncpy(retrofile, file, len);
+    }
 
-	if (st(retrofile, &info)) {
-		lua_pushnil (L);
-		lua_pushfstring (L, "cannot obtain information from file `%s'", retrofile);
-		return 2;
-	}
-	if (lua_isstring (L, 2)) {
-		int v;
-		const char *member = lua_tostring (L, 2);
-		if (strcmp (member, "mode") == 0) v = 0;
+    if (st(retrofile, &info)) {
+        lua_pushnil(L);
+        lua_pushfstring(L, "cannot obtain information from file `%s'", retrofile);
+        return 2;
+    }
+    if (lua_isstring(L, 2)) {
+        int v;
+        const char *member = lua_tostring(L, 2);
+        if (strcmp(member, "mode") == 0) v = 0;
 #ifndef _WIN32
-		else if (strcmp (member, "blocks")  == 0) v = 11;
-		else if (strcmp (member, "blksize") == 0) v = 12;
+        else if (strcmp(member, "blocks") == 0)
+            v = 11;
+        else if (strcmp(member, "blksize") == 0)
+            v = 12;
 #endif
-		else /* look for member */
-			for (v = 1; members[v].name; v++)
-				if (*members[v].name == *member)
-					break;
-		/* push member value and return */
-		members[v].push (L, &info);
-		return 1;
-	} else if (!lua_istable (L, 2))
-		/* creates a table if none is given */
-		lua_newtable (L);
-	/* stores all members in table on top of the stack */
-	for (i = 0; members[i].name; i++) {
-		lua_pushstring (L, members[i].name);
-		members[i].push (L, &info);
-		lua_rawset (L, -3);
-	}
-	return 1;
+        else /* look for member */
+            for (v = 1; members[v].name; v++)
+        if (*members[v].name == *member) break;
+        /* push member value and return */
+        members[v].push(L, &info);
+        return 1;
+    } else if (!lua_istable(L, 2))
+        /* creates a table if none is given */
+        lua_newtable(L);
+    /* stores all members in table on top of the stack */
+    for (i = 0; members[i].name; i++) {
+        lua_pushstring(L, members[i].name);
+        members[i].push(L, &info);
+        lua_rawset(L, -3);
+    }
+    return 1;
 }
 
 
