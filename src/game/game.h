@@ -355,10 +355,11 @@ class game
     bool m_overlay_size_is_dynamic; // whether the game dynamically re-allocates
                                     // its overlay to match the size of the mpeg
                                     // (thayer's quest, seektest both do this)
-    SDL_Surface *m_video_overlay[MAX_VIDEO_OVERLAY_BUFFERS]; // graphic buffers
-                                                             // to hold
-                                                             // ROM-generated
-                                                             // video
+
+    // graphic buffers to hold ROM-generated video
+    SDL_Surface *m_video_overlay[MAX_VIDEO_OVERLAY_BUFFERS];
+    // video overlay texture
+    SDL_Texture *m_video_overlay_texture = nullptr;
 
     Overlay m_virtual_video_overlay;
     bool m_use_virtual_overlay = false;

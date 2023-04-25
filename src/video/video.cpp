@@ -45,23 +45,14 @@ using namespace std;
 
 namespace {
 
-// Convert surface to specified pixel format and free the original surface.
-void ConvertSurface(SDL_Surface **surface, const SDL_PixelFormat *fmt)
-{
-    SDL_Surface *tmpSurface = SDL_ConvertSurface(*surface, fmt, 0);
-    SDL_FreeSurface(*surface);
-    *surface = tmpSurface;
-}
-
 Overlay sb_overlay;
 Overlay aux_overlay;
 Overlay leds_overlay;
 Overlay score_lives_credit_leds_overlay;
 Overlay layout;
 
+// this goes on top of the video, drawn by daphne or singe games
 Overlay *screen_overlay = nullptr;
-// Whether the overlay texture was ever updated from a real (pixel buffer based) overlay
-bool use_overlay_texture = false;
 
 }
 
@@ -94,14 +85,7 @@ SDL_Window *g_window               = NULL;
 SDL_Window *g_sb_window            = NULL;
 SDL_Renderer *g_renderer           = NULL;
 SDL_Renderer *g_sb_renderer        = NULL;
-
-// TODO: remove
-SDL_Texture *g_overlay_texture     = NULL; // The OVERLAY texture, excluding LEDs wich are a special case
-
 SDL_Texture *g_yuv_texture         = NULL; // The YUV video texture, registered from ldp-vldp.cpp
-
-// TODO: remove
-SDL_Surface *g_screen_blitter      = NULL; // The main blitter surface
 SDL_Surface *g_leds_surface        = NULL;
 SDL_Surface *g_sb_surface          = NULL;
 SDL_Texture *g_sb_texture          = NULL;
@@ -507,9 +491,6 @@ bool init_display()
     g_ttfont_fc = FC_CreateFont();
     FC_LoadFontFromTTF(g_ttfont_fc, g_renderer, g_ttfont, FC_MakeColor(0xe1, 0xe1, 0xe1, 0xff));
 
-    g_screen_blitter = SDL_CreateRGBSurface(SDL_SWSURFACE, g_overlay_width, g_overlay_height,
-                                            surfacebpp, Rmask, Gmask, Bmask, Amask);
-
     // Check for game overlay enhancements (depth and size)
     g_enhance_overlay = g_game->get_overlay_upgrade();
     g_overlay_resize  = g_game->get_fullsize_overlay();
@@ -520,36 +501,7 @@ bool init_display()
     leds_overlay.SetSize(320, 240);
     score_lives_credit_leds_overlay.SetSize(320, 240);
 
-    // Convert the LEDs surface to the destination surface format for
-    // faster blitting, and set it's color key to NOT copy 0x000000ff
-    // pixels. We couldn't do it earlier in load_bmps() because we need
-    // the g_screen_blitter format.
-#if 0
-    ConvertSurface(&g_other_bmps[B_OVERLAY_LEDS], g_screen_blitter->format);
-    SDL_SetColorKey(g_other_bmps[B_OVERLAY_LEDS], SDL_TRUE, 0x000000ff);
-#endif
-
-#if 0
-    if (g_game->get_use_old_overlay()) {
-        ConvertSurface(&g_other_bmps[B_OVERLAY_LDP1450], g_screen_blitter->format);
-        SDL_SetColorKey(g_other_bmps[B_OVERLAY_LDP1450], SDL_TRUE, 0x000000ff);
-    }
-#endif
-
-    // MAC: If the game uses an overlay, create a texture for it.
-    // The g_screen_blitter surface is used from game.cpp anyway, so we
-    // always create it, used or not.
-    if (g_overlay_width && g_overlay_height) {
-        g_overlay_texture =
-            SDL_CreateTexture(g_renderer, SDL_PIXELFORMAT_RGBA8888,
-                              g_texture_access, g_overlay_width, g_overlay_height);
-
-        SDL_SetTextureBlendMode(g_overlay_texture, SDL_BLENDMODE_BLEND);
-        SDL_SetTextureAlphaMod(g_overlay_texture, 0xff);
-    }
-
     SDL_SetRenderDrawColor(g_renderer, 0, 0, 0, SDL_ALPHA_OPAQUE);
-
     SDL_RenderClear(g_renderer);
     SDL_RenderPresent(g_renderer);
     // NOTE: SDL Console was initialized here.
@@ -589,7 +541,7 @@ bool deinit_display()
     if (g_sb_blit_surface) SDL_FreeSurface(g_sb_blit_surface);
     if (g_aux_blit_surface) SDL_FreeSurface(g_aux_blit_surface);
 
-    SDL_FreeSurface(g_screen_blitter);
+    // SDL_FreeSurface(g_screen_blitter);
     SDL_FreeSurface(g_leds_surface);
 
     FC_FreeFont(g_font);
@@ -603,7 +555,7 @@ bool deinit_display()
     if (g_aux_texture)
         SDL_DestroyTexture(g_aux_texture);
 
-    SDL_DestroyTexture(g_overlay_texture);
+    // SDL_DestroyTexture(g_overlay_texture);
     SDL_DestroyRenderer(g_renderer);
     SDL_DestroyWindow(g_window);
 
@@ -616,14 +568,12 @@ void resize_cleanup()
 
     g_rotate = false;
 
-    if (g_screen_blitter) SDL_FreeSurface(g_screen_blitter);
     if (g_leds_surface) SDL_FreeSurface(g_leds_surface);
     if (g_aux_blit_surface) SDL_FreeSurface(g_aux_blit_surface);
 
     if (g_bezel_texture) SDL_DestroyTexture(g_bezel_texture);
     if (g_aux_texture) SDL_DestroyTexture(g_aux_texture);
 
-    if (g_overlay_texture) SDL_DestroyTexture(g_overlay_texture);
     if (g_renderer) SDL_DestroyRenderer(g_renderer);
 
     SDL_DestroyWindow(g_window);
@@ -1085,8 +1035,8 @@ void free_one_bmp(SDL_Texture *candidate) {
 
 SDL_Window *get_window() { return g_window; }
 SDL_Renderer *get_renderer() { return g_renderer; }
-SDL_Texture *get_screen() { return g_overlay_texture; }
-SDL_Surface *get_screen_blitter() { return g_screen_blitter; }
+// SDL_Texture *get_screen() { return g_overlay_texture; }
+// SDL_Surface *get_screen_blitter() { return g_screen_blitter; }
 SDL_Texture *get_yuv_screen() { return g_yuv_texture; }
 
 Overlay *get_screen_leds() { return &leds_overlay; }
@@ -1427,45 +1377,6 @@ int vid_update_yuv_overlay ( uint8_t *Yplane, uint8_t *Uplane, uint8_t *Vplane,
     return 0;
 }
 
-void vid_update_overlay_surface (SDL_Surface *tx, int x, int y) {
-    // We have got here from game::blit(), which is also called when scoreboard is updated,
-    // so in that case we simply return and don't do any overlay surface update. 
-    if (g_scoreboard_needs_update) {
-        return;
-    }
-    
-    // Remember: tx is m_video_overlay[] passed from game::blit() 
-    // Careful not comment this part on testing, because this rect is used in vid_blit!
-    g_overlay_size_rect.x = (short)x;
-    g_overlay_size_rect.y = (short)y;
-    g_overlay_size_rect.w = tx->w;
-    g_overlay_size_rect.h = tx->h;
-
-    if (g_overlay_resize)
-        g_render_size_rect = g_overlay_size_rect;
-
-    if (g_enhance_overlay) {
-
-        // DBX: 32bit overlay from Singe
-        SDL_SetColorKey (tx, SDL_TRUE, 0x00000000);
-        SDL_FillRect(g_screen_blitter, NULL, 0x00000000);
-        SDL_BlitSurface(tx, NULL, g_screen_blitter, NULL);
-
-    } else {
-
-        // MAC: 8bpp to RGBA8888 conversion. Black pixels are considered totally transparent so they become 0x00000000;
-        for (int i = 0; i < (tx->w * tx->h); i++) {
-	    *((uint32_t*)(g_screen_blitter->pixels)+i) =
-	    (0x00000000 | tx->format->palette->colors[*((uint8_t*)(tx->pixels)+i)].r) << 24 |
-	    (0x00000000 | tx->format->palette->colors[*((uint8_t*)(tx->pixels)+i)].g) << 16 |
-	    (0x00000000 | tx->format->palette->colors[*((uint8_t*)(tx->pixels)+i)].b) << 8  |
-	    (0x00000000 | tx->format->palette->colors[*((uint8_t*)(tx->pixels)+i)].a);
-        }
-    }
-
-    g_overlay_needs_update = true;
-}
-
 void vid_blit () {
     // *IF* we get to SDL_VIDEO_BLIT from game::blit(), then the access to the
     // overlay and scoreboard textures is done from the "hypseus" thread, that blocks
@@ -1506,24 +1417,7 @@ void vid_blit () {
         SDL_UnlockMutex(g_yuv_surface->mutex);
     }
 
-    // Does OVERLAY texture need update from the scoreboard surface?
-    if (g_scoreboard_needs_update) {
-#if 0
-        SDL_UpdateTexture(g_overlay_texture, &g_leds_size_rect,
-	    (void *)g_leds_surface->pixels, g_leds_surface->pitch);
-#endif
-    }
-
-    // Does OVERLAY texture need update from the overlay surface?
-    if (g_overlay_needs_update) {
-#if 0
-        SDL_UpdateTexture(g_overlay_texture, &g_overlay_size_rect,
-	    (void *)g_screen_blitter->pixels, g_screen_blitter->pitch);
-
-        g_overlay_needs_update = false;
-#endif
-    }
-
+    // FIXME: For PoC only, needs to support layout config
     SDL_Rect layout_rect{0, 0, 1080, 1920};
     SDL_Rect video_rect{0, 500, 1080, 810};
     SDL_RenderSetLogicalSize(g_renderer, layout_rect.w, layout_rect.h);
@@ -1551,35 +1445,12 @@ void vid_blit () {
 
     if (screen_overlay) {
         layout.GetDrawList().Image(screen_overlay, video_rect);
-    } else {
-        if (g_overlay_needs_update) {
-            SDL_UpdateTexture(g_overlay_texture, &g_overlay_size_rect,
-                              (void *)g_screen_blitter->pixels, g_screen_blitter->pitch);
-
-            use_overlay_texture = true;
-            g_overlay_needs_update = false;
-        }
-
-        if (use_overlay_texture) {
-            layout.GetDrawList().Image(g_overlay_texture, video_rect);
-            // if (!g_scale_view)
-            //     SDL_RenderCopy(g_renderer, g_overlay_texture, &g_render_size_rect, NULL);
-            // else
-            //     SDL_RenderCopy(g_renderer, g_overlay_texture,
-            //                    &g_render_size_rect, &g_scaling_rect);
-        }
     }
 
     // layout.GetDrawList().Image(&leds_overlay, video_rect);
     layout.GetDrawList().Image(&score_lives_credit_leds_overlay, video_rect);
 
     layout.Render();
-
-    if (screen_overlay) {
-        // TODO: better palce to clear?
-        screen_overlay->GetDrawList().Clear();
-        screen_overlay = nullptr;
-    }
 
     // leds_overlay.Render();
 
@@ -1603,26 +1474,26 @@ void vid_blit () {
     if (g_scanlines)
         draw_scanlines(g_viewport_width, g_viewport_height, s_shunt);
 
-    if (g_fRotateDegrees != 0) {
-        if (g_yuv_texture)
-            SDL_RenderCopyEx(g_renderer, g_yuv_texture, NULL, NULL,
-                      g_fRotateDegrees, NULL, g_flipState);
-        if (g_overlay_texture) {
-            if (!g_rotate) {
-                int8_t ar = 2;
-                if (g_aspect_ratio == ASPECTWS && g_overlay_resize) ar--;
-                g_rotate_rect.w = g_render_size_rect.h + (g_render_size_rect.w >> ar);
-                g_rotate_rect.h = g_render_size_rect.h;
-                g_rotate_rect.x = g_rotate_rect.y = 0;
-                g_rotate = true;
-            }
-            SDL_RenderCopyEx(g_renderer, g_overlay_texture, &g_rotate_rect, NULL,
-                      g_fRotateDegrees, NULL, g_flipState);
-        }
-    } else if (g_game->get_sinden_border())
-	    if (!g_bezel_texture)
-                draw_border(g_game->get_sinden_border(),
-                      g_game->get_sinden_border_color());
+    // if (g_fRotateDegrees != 0) {
+    //     if (g_yuv_texture)
+    //         SDL_RenderCopyEx(g_renderer, g_yuv_texture, NULL, NULL,
+    //                   g_fRotateDegrees, NULL, g_flipState);
+    //     if (g_overlay_texture) {
+    //         if (!g_rotate) {
+    //             int8_t ar = 2;
+    //             if (g_aspect_ratio == ASPECTWS && g_overlay_resize) ar--;
+    //             g_rotate_rect.w = g_render_size_rect.h + (g_render_size_rect.w >> ar);
+    //             g_rotate_rect.h = g_render_size_rect.h;
+    //             g_rotate_rect.x = g_rotate_rect.y = 0;
+    //             g_rotate = true;
+    //         }
+    //         SDL_RenderCopyEx(g_renderer, g_overlay_texture, &g_rotate_rect, NULL,
+    //                   g_fRotateDegrees, NULL, g_flipState);
+    //     }
+    // } else if (g_game->get_sinden_border())
+	   //  if (!g_bezel_texture)
+    //             draw_border(g_game->get_sinden_border(),
+    //                   g_game->get_sinden_border_color());
 
     if (g_bezel_toggle) {
         SDL_RenderSetViewport(g_renderer, NULL);

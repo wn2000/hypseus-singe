@@ -361,34 +361,41 @@ bool game::init_video()
         return false;
     }
 
-    bool result = true; // it's easier to assume true here and find out
-                        // false, than the reverse
-
     // create each buffer
     for (int index = 0; index < m_video_overlay_count; index++) {
         m_video_overlay[index] =
             SDL_CreateRGBSurface(SDL_SWSURFACE, m_video_overlay_width, m_video_overlay_height,
-                                 m_overlay_depth, 0, 0, 0, 0); // create a
-                                                               // surface
+                                 m_overlay_depth, 0, 0, 0, 0);
 
-        // check to see if we got an error (this should never happen)
         if (!m_video_overlay[index]) {
-            LOGW << "ODD ERROR : SDL_CreateRGBSurface failed in init_video!";
-            result = false;
+            LOGE << "ODD ERROR : SDL_CreateRGBSurface failed in init_video: "
+                 << SDL_GetError();
+            return false;
         }
     }
+
+    m_video_overlay_texture =
+        SDL_CreateTexture(video::get_renderer(), SDL_PIXELFORMAT_RGBA8888,
+                          SDL_TEXTUREACCESS_STREAMING, m_video_overlay_width,
+                          m_video_overlay_height);
+    if (!m_video_overlay_texture) {
+        LOGE << "Error creating video overlay texture: " << SDL_GetError();
+        return false;
+    }
+
+    SDL_SetTextureBlendMode(m_video_overlay_texture, SDL_BLENDMODE_BLEND);
 
     // if we created the surfaces alright, then allocate space for the
     // color palette
-    if (result) {
-        result = palette::initialize(m_palette_color_count);
-        if (result) {
-            palette_calculate();
-            palette::finalize();
-        }
+    if (!palette::initialize(m_palette_color_count)) {
+        LOGE << "Error initializing palette.";
+        return false;
     }
 
-    return (result);
+    palette_calculate();
+    palette::finalize();
+
+    return true;
 }
 
 // shuts down any video we might have initialized
@@ -401,10 +408,15 @@ void game::shutdown_video()
     for (index = 0; index < m_video_overlay_count; index++) {
         // only free surface if it has been allocated (if we get an error in
         // init_video, some surfaces may not be allocated)
-        if (m_video_overlay[index] != NULL) {
+        if (m_video_overlay[index]) {
             SDL_FreeSurface(m_video_overlay[index]);
-            m_video_overlay[index] = NULL;
+            m_video_overlay[index] = nullptr;
         }
+    }
+
+    if (m_video_overlay_texture) {
+        SDL_DestroyTexture(m_video_overlay_texture);
+        m_video_overlay_texture = nullptr;
     }
 }
 
@@ -443,18 +455,56 @@ void game::blit()
         if (m_active_video_overlay >= m_video_overlay_count) {
             m_active_video_overlay = 0;
         }
+
+        m_virtual_video_overlay.GetDrawList().Clear();
+
         repaint(); // call game-specific function to get palette refreshed
-        m_video_overlay_needs_update =
-            false; // game will need to set this value to true next time it
-                   // becomes needful for us to redraw the screen
+
+        // game will need to set this value to true next time it becomes needful
+        // for us to redraw the screen
+        m_video_overlay_needs_update = false;
 
         // MAC: No software scaling to be done on SDL2, so we just update the texture here,
         // and SDL_RenderCopy() will hw-scale for us.
-        if (m_use_virtual_overlay) {
-            video::set_virtual_screen_overlay(&m_virtual_video_overlay);
-        } else {
-            video::vid_update_overlay_surface(m_video_overlay[m_active_video_overlay], 0, 0);
+        if (!m_use_virtual_overlay) {
+            SDL_Surface *tx = m_video_overlay[m_active_video_overlay];
+
+            // FIXME: remove if not used
+            // if (m_overlay_upgrade) {
+            //     // DBX: 32bit overlay from Singe
+            //     SDL_SetColorKey(tx, SDL_TRUE, 0x00000000);
+            //     SDL_FillRect(m_rgba_surface, NULL, 0x00000000);
+            //     SDL_BlitSurface(tx, NULL, m_rgba_surface, NULL);
+            // } 
+
+            if (!m_overlay_upgrade) {
+                // MAC: 8bpp to RGBA8888 conversion. Black pixels are considered
+                // totally transparent so they become 0x00000000;
+                int n = m_video_overlay_width * m_video_overlay_height;
+                SDL_Color *colors = tx->format->palette->colors;
+                uint8_t *pixels = (uint8_t *)tx->pixels;
+
+                uint32_t *dest = nullptr;
+                int pitch = 0;
+
+                if (SDL_LockTexture(m_video_overlay_texture, nullptr, (void **)&dest, &pitch)) {
+                    LOGE << "Error locking texture for update: " << SDL_GetError();
+                    return;
+                }
+                for (int i = 0; i < n; i++) {
+                    const SDL_Color& color = colors[pixels[i]];
+                    dest[i] = color.r << 24 | color.g << 16 | color.b << 8 | color.a;
+                }
+                SDL_UnlockTexture(m_video_overlay_texture);
+            }
+
+            m_virtual_video_overlay.SetSize(320, 240);
+            m_virtual_video_overlay.GetDrawList().Image(m_video_overlay_texture, 0, 0,
+                                                        m_virtual_video_overlay.Width(),
+                                                        m_virtual_video_overlay.Height());
         }
+
+        video::set_virtual_screen_overlay(&m_virtual_video_overlay);
     }
     video::vid_blit();
 }

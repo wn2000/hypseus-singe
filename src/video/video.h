@@ -100,7 +100,6 @@ int vid_update_yuv_texture (uint8_t *Yplane, uint8_t *Uplane, uint8_t *Vplane, i
 void vid_blank_yuv_texture (bool value);
 void vid_free_yuv_overlay ();
 
-void vid_update_overlay_surface(SDL_Surface *tx, int x, int y);
 void vid_blit();
 // MAC: sdl_video_run thread block ends here
 
@@ -132,9 +131,7 @@ void draw_rectangle(short x, short y, unsigned short w, unsigned short h,
                     unsigned char red, unsigned char green, unsigned char blue);
 SDL_Window *get_window();
 SDL_Renderer *get_renderer();
-SDL_Texture *get_screen();
 SDL_Texture *get_yuv_screen();
-SDL_Surface *get_screen_blitter();
 Overlay *get_screen_leds();
 Overlay *get_score_lives_credit_leds();
 FC_Font *get_font();
